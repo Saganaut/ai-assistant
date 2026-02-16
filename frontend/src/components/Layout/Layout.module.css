@@ -15,15 +15,47 @@
   height: 48px;
 }
 
+.headerLeft {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
 .headerTitle {
   font-size: 1.1rem;
   font-weight: 600;
   color: var(--color-text-primary);
 }
 
+.headerRight {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+}
+
 .headerStatus {
   font-size: 0.8rem;
+}
+
+.statusConnected {
   color: var(--color-success);
+}
+
+.statusDisconnected {
+  color: var(--color-error);
+}
+
+.settingsButton {
+  background: none;
+  border: none;
+  color: var(--color-text-muted);
+  font-size: 1rem;
+  cursor: pointer;
+  padding: var(--spacing-xs);
+}
+
+.settingsButton:hover {
+  color: var(--color-text-primary);
 }
 
 .main {
@@ -48,14 +80,137 @@
   overflow: hidden;
 }
 
+/* Mobile layout */
 @media (max-width: 768px) {
   .main {
     grid-template-columns: 1fr;
     overflow-y: auto;
+    padding: var(--spacing-sm);
   }
 
   .leftColumn,
   .rightColumn {
     overflow: visible;
   }
+
+  /* On mobile, hide chat by default - show via floating button */
+  .rightColumn {
+    display: none;
+  }
+
+  .rightColumnVisible {
+    display: flex;
+    position: fixed;
+    top: 48px;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 100;
+    padding: var(--spacing-sm);
+    background-color: var(--color-bg-primary);
+  }
+}
+
+/* Floating chat button for mobile */
+.floatingChatButton {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .floatingChatButton {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: fixed;
+    bottom: var(--spacing-md);
+    right: var(--spacing-md);
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    background-color: var(--color-accent);
+    color: white;
+    border: none;
+    font-size: 1.5rem;
+    cursor: pointer;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    z-index: 99;
+  }
+
+  .floatingChatButton:hover {
+    background-color: var(--color-accent-hover);
+  }
+}
+
+/* Settings modal */
+.settingsOverlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+}
+
+.settingsModal {
+  background-color: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--spacing-lg);
+  width: 90%;
+  max-width: 500px;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+.settingsTitle {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  margin-bottom: var(--spacing-md);
+}
+
+.settingsSection {
+  margin-bottom: var(--spacing-md);
+}
+
+.settingsSectionTitle {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  margin-bottom: var(--spacing-sm);
+}
+
+.settingsRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--spacing-xs) 0;
+  font-size: 0.85rem;
+  color: var(--color-text-primary);
+}
+
+.settingsValue {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+}
+
+.settingsClose {
+  width: 100%;
+  padding: var(--spacing-sm);
+  background-color: var(--color-bg-input);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-text-primary);
+  font-size: 0.9rem;
+  cursor: pointer;
+  margin-top: var(--spacing-md);
+}
+
+.settingsClose:hover {
+  border-color: var(--color-accent);
 }

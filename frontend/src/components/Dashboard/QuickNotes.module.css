@@ -1,0 +1,165 @@
+.quickNotes {
+  background-color: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--spacing-md);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.tabs {
+  display: flex;
+  gap: var(--spacing-xs);
+}
+
+.tab {
+  font-size: 0.75rem;
+  padding: 2px var(--spacing-sm);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.tab:hover {
+  color: var(--color-text-primary);
+  border-color: var(--color-text-muted);
+}
+
+.tabActive {
+  composes: tab;
+  background-color: var(--color-accent-dim);
+  color: var(--color-text-primary);
+  border-color: var(--color-accent-dim);
+}
+
+.inputRow {
+  display: flex;
+  gap: var(--spacing-sm);
+}
+
+.noteInput {
+  flex: 1;
+  padding: var(--spacing-xs) var(--spacing-sm);
+  background-color: var(--color-bg-input);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-primary);
+  font-family: var(--font-family);
+  font-size: 0.85rem;
+  outline: none;
+  resize: none;
+}
+
+.noteInput:focus {
+  border-color: var(--color-accent);
+}
+
+.saveButton {
+  padding: var(--spacing-xs) var(--spacing-sm);
+  background-color: var(--color-accent);
+  color: white;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.saveButton:hover {
+  background-color: var(--color-accent-hover);
+}
+
+.saveButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.notesList {
+  max-height: 150px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.noteFile {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 0.8rem;
+  color: var(--color-text-primary);
+  background: none;
+  border: none;
+  text-align: left;
+  width: 100%;
+  font-family: var(--font-family);
+}
+
+.noteFile:hover {
+  background-color: var(--color-bg-input);
+}
+
+.noteFileName {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+}
+
+.noteDate {
+  font-size: 0.7rem;
+  color: var(--color-text-muted);
+}
+
+.noteContent {
+  background-color: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: var(--spacing-sm);
+  font-size: 0.8rem;
+  max-height: 150px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  color: var(--color-text-primary);
+}
+
+.backLink {
+  font-size: 0.75rem;
+  color: var(--color-accent);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+}
+
+.backLink:hover {
+  color: var(--color-accent-hover);
+}
+
+.empty {
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+  font-style: italic;
+}
+
+.saved {
+  font-size: 0.75rem;
+  color: var(--color-success);
+}

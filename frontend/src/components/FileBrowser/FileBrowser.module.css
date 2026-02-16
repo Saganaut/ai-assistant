@@ -1,0 +1,156 @@
+.fileBrowser {
+  background-color: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--spacing-md);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.breadcrumb {
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+  padding: var(--spacing-xs) 0;
+}
+
+.breadcrumbLink {
+  color: var(--color-accent);
+  cursor: pointer;
+  background: none;
+  border: none;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  padding: 0;
+}
+
+.breadcrumbLink:hover {
+  color: var(--color-accent-hover);
+}
+
+.entries {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  max-height: 250px;
+  overflow-y: auto;
+}
+
+.entry {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 0.85rem;
+  color: var(--color-text-primary);
+  background: none;
+  border: none;
+  text-align: left;
+  width: 100%;
+  font-family: var(--font-family);
+}
+
+.entry:hover {
+  background-color: var(--color-bg-input);
+}
+
+.entryIcon {
+  font-size: 0.9rem;
+  width: 20px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.entryName {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.entryMeta {
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  flex-shrink: 0;
+}
+
+.empty {
+  color: var(--color-text-muted);
+  font-size: 0.85rem;
+  font-style: italic;
+  padding: var(--spacing-sm);
+}
+
+.error {
+  color: var(--color-error);
+  font-size: 0.85rem;
+  padding: var(--spacing-sm);
+}
+
+.loading {
+  color: var(--color-text-muted);
+  font-size: 0.85rem;
+  padding: var(--spacing-sm);
+}
+
+.fileViewer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.fileViewerHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.fileViewerName {
+  font-size: 0.85rem;
+  font-family: var(--font-mono);
+  color: var(--color-text-primary);
+}
+
+.backButton {
+  font-size: 0.8rem;
+  color: var(--color-accent);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: var(--spacing-xs) var(--spacing-sm);
+}
+
+.backButton:hover {
+  color: var(--color-accent-hover);
+}
+
+.fileContent {
+  background-color: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: var(--spacing-sm);
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--color-text-primary);
+  max-height: 200px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
