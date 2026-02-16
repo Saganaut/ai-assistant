@@ -30,7 +30,10 @@ class Settings(BaseSettings):
     port: int = 8000
     cors_origins: list[str] = ["*"]
 
-    model_config = {"env_file": ".env", "env_prefix": "ASSISTANT_"}
+    model_config = {
+        "env_file": str(Path(__file__).resolve().parent.parent.parent / ".env"),
+        "env_prefix": "ASSISTANT_",
+    }
 
 
 settings = Settings()

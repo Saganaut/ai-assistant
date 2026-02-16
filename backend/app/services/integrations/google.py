@@ -4,44 +4,91 @@ Uses Google API client with service account or OAuth credentials.
 The credentials path is configured via ASSISTANT_GOOGLE_CREDENTIALS_PATH.
 """
 
-import json
 import logging
-from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 import httpx
+from google.auth.transport.requests import Request
+from google.oauth2.credentials import Credentials
 
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
+SCOPES = [
+    "https://www.googleapis.com/auth/calendar",
+    "https://www.googleapis.com/auth/drive",
+    "https://www.googleapis.com/auth/gmail.modify",
+]
+
 
 class GoogleService:
-    """Manages Google API access with token caching."""
+    """Manages Google API access using OAuth credentials from a JSON file."""
 
     def __init__(self):
         self._credentials_path = settings.google_credentials_path
-        self._token: str | None = None
-        self._token_expiry: datetime | None = None
+        self._credentials: Credentials | None = None
+
+    def _load_credentials(self) -> Credentials | None:
+        """Load OAuth credentials from the configured JSON file."""
+        if not self._credentials_path:
+            return None
+
+        creds_file = Path(self._credentials_path)
+        if not creds_file.exists():
+            logger.warning(f"Google credentials file not found: {creds_file}")
+            return None
+
+        try:
+            creds = Credentials.from_authorized_user_file(str(creds_file), SCOPES)
+            return creds
+        except Exception as e:
+            logger.error(f"Failed to load Google credentials: {e}")
+            return None
+
+    def _get_credentials(self) -> Credentials:
+        """Get valid credentials, refreshing if needed."""
+        if self._credentials is None:
+            self._credentials = self._load_credentials()
+
+        if self._credentials is None:
+            raise ValueError(
+                "Google credentials not configured. "
+                "Set ASSISTANT_GOOGLE_CREDENTIALS_PATH to your OAuth credentials JSON file."
+            )
+
+        if self._credentials.expired and self._credentials.refresh_token:
+            self._credentials.refresh(Request())
+            # Save refreshed token back to file
+            self._save_credentials()
+
+        return self._credentials
+
+    def _save_credentials(self) -> None:
+        """Save current credentials back to the JSON file (preserves refresh token)."""
+        if not self._credentials_path or not self._credentials:
+            return
+        try:
+            creds_file = Path(self._credentials_path)
+            creds_file.write_text(self._credentials.to_json())
+        except Exception as e:
+            logger.error(f"Failed to save refreshed credentials: {e}")
 
     async def _get_headers(self) -> dict[str, str]:
-        """Get authorization headers. For now, uses API key or pre-configured token."""
-        # This is a simplified auth flow. In production, you'd use
-        # google-auth library with service account credentials.
-        # For the initial implementation, we'll use a pre-configured OAuth token.
-        if self._token:
-            return {
-                "Authorization": f"Bearer {self._token}",
-                "Content-Type": "application/json",
-            }
-        raise ValueError(
-            "Google credentials not configured. "
-            "Set ASSISTANT_GOOGLE_CREDENTIALS_PATH or configure OAuth token."
-        )
+        """Get authorization headers with a valid access token."""
+        creds = self._get_credentials()
+        return {
+            "Authorization": f"Bearer {creds.token}",
+            "Content-Type": "application/json",
+        }
 
-    def set_token(self, token: str) -> None:
-        """Set the OAuth access token directly."""
-        self._token = token
+    @property
+    def is_configured(self) -> bool:
+        """Check if Google credentials are available."""
+        if not self._credentials_path:
+            return False
+        return Path(self._credentials_path).exists()
 
 
 class GoogleCalendarService:

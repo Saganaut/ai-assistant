@@ -54,12 +54,45 @@ class Agent:
         contents = [types.Content(**m) for m in messages]
 
         max_iterations = 10
-        for _ in range(max_iterations):
+        for iteration in range(max_iterations):
+            # Log request details before API call
+            msg_summary = []
+            for c in contents:
+                role = c.role if hasattr(c, 'role') else '?'
+                parts_text = []
+                if hasattr(c, 'parts') and c.parts:
+                    for p in c.parts:
+                        if hasattr(p, 'text') and p.text:
+                            parts_text.append(p.text[:200])
+                        elif hasattr(p, 'function_call') and p.function_call:
+                            parts_text.append(f"[call:{p.function_call.name}]")
+                        elif hasattr(p, 'function_response') and p.function_response:
+                            parts_text.append(f"[result:{p.function_response.name}]")
+                msg_summary.append(f"  {role}: {' | '.join(parts_text)}")
+
+            tool_names = [d["name"] for d in self.registry.gemini_declarations()]
+            logger.info(
+                f"=== LLM API Call (iteration {iteration + 1}/{max_iterations}) ===\n"
+                f"  Model: {self.model}\n"
+                f"  Tools: {len(tool_names)} ({', '.join(tool_names)})\n"
+                f"  Messages ({len(contents)}):\n" + "\n".join(msg_summary)
+            )
+
             response = self.client.models.generate_content(
                 model=self.model,
                 contents=contents,
                 config=config,
             )
+
+            # Log response token usage
+            usage = response.usage_metadata
+            if usage:
+                logger.info(
+                    f"=== LLM Response ===\n"
+                    f"  Prompt tokens: {usage.prompt_token_count}\n"
+                    f"  Response tokens: {usage.candidates_token_count}\n"
+                    f"  Total tokens: {usage.total_token_count}"
+                )
 
             # Check if the response has function calls
             has_function_calls = False
@@ -71,6 +104,7 @@ class Agent:
             if not has_function_calls:
                 # No tool calls - yield the text response
                 if response.text:
+                    logger.info(f"  Response text: {response.text[:300]}")
                     yield response.text
                 return
 

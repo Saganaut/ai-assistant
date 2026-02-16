@@ -16,6 +16,10 @@ frontend/build/
 .env.local
 .env.production
 
+# Secrets / credentials
+client_secret*.json
+*-credentials.json
+
 # Database
 *.db
 *.sqlite

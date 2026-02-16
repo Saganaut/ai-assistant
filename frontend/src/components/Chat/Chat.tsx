@@ -15,8 +15,12 @@ export function Chat() {
   const [conversationId, setConversationId] = useState<number | null>(null);
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [showSidebar, setShowSidebar] = useState(false);
+  const [wsConnected, setWsConnected] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const wsRef = useRef<WebSocket | null>(null);
+  const reconnectTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const reconnectAttempts = useRef(0);
+  const unmountedRef = useRef(false);
 
   const loadConversations = useCallback(async () => {
     try {
@@ -31,10 +35,23 @@ export function Chat() {
     loadConversations();
   }, [loadConversations]);
 
-  useEffect(() => {
+  const connectWebSocket = useCallback(() => {
+    if (unmountedRef.current) return;
+
+    // Close existing connection if any
+    if (wsRef.current) {
+      wsRef.current.onclose = null;
+      wsRef.current.close();
+    }
+
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const ws = new WebSocket(`${protocol}//${window.location.hostname}:8000/api/chat/ws`);
     wsRef.current = ws;
+
+    ws.onopen = () => {
+      reconnectAttempts.current = 0;
+      setWsConnected(true);
+    };
 
     ws.onmessage = (event) => {
       try {
@@ -60,17 +77,47 @@ export function Chat() {
 
     ws.onclose = () => {
       setIsStreaming(false);
+      setWsConnected(false);
+
+      if (unmountedRef.current) return;
+
+      // Exponential backoff: 1s, 2s, 4s, 8s, max 30s
+      const delay = Math.min(1000 * 2 ** reconnectAttempts.current, 30000);
+      reconnectAttempts.current += 1;
+      reconnectTimeout.current = setTimeout(connectWebSocket, delay);
     };
 
-    return () => ws.close();
+    ws.onerror = () => {
+      // onclose will fire after this, which handles reconnect
+    };
   }, [loadConversations]);
+
+  useEffect(() => {
+    unmountedRef.current = false;
+    connectWebSocket();
+
+    return () => {
+      unmountedRef.current = true;
+      if (reconnectTimeout.current) {
+        clearTimeout(reconnectTimeout.current);
+      }
+      if (wsRef.current) {
+        wsRef.current.onclose = null;
+        wsRef.current.close();
+      }
+    };
+  }, [connectWebSocket]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
   const sendMessage = () => {
-    if (!input.trim() || isStreaming || !wsRef.current) return;
+    if (!input.trim() || isStreaming) return;
+    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
+      connectWebSocket();
+      return;
+    }
 
     const userMessage: Message = { role: 'user', content: input.trim() };
     setMessages((prev) => [...prev, userMessage]);
@@ -126,6 +173,7 @@ export function Chat() {
         </button>
         <span className={styles.chatTitle}>
           {conversationId ? `Chat #${conversationId}` : 'New Chat'}
+          {!wsConnected && <span className={styles.disconnected}> (reconnecting...)</span>}
         </span>
         <button className={styles.newChatButton} onClick={startNewConversation}>
           +

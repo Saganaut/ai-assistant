@@ -11,8 +11,6 @@ interface CalendarEvent {
 export function CalendarWidget() {
   const [configured, setConfigured] = useState<boolean | null>(null);
   const [events, setEvents] = useState<CalendarEvent[]>([]);
-  const [tokenInput, setTokenInput] = useState('');
-  const [error, setError] = useState('');
 
   const checkStatus = useCallback(async () => {
     try {
@@ -27,21 +25,6 @@ export function CalendarWidget() {
   useEffect(() => {
     checkStatus();
   }, [checkStatus]);
-
-  const submitToken = async () => {
-    if (!tokenInput.trim()) return;
-    try {
-      await fetch(`${API_BASE}/google/token`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ access_token: tokenInput.trim() }),
-      });
-      setTokenInput('');
-      setConfigured(true);
-    } catch {
-      setError('Failed to set token');
-    }
-  };
 
   const today = new Date();
   const dateStr = today.toLocaleDateString('en-US', {
@@ -62,19 +45,8 @@ export function CalendarWidget() {
       ) : !configured ? (
         <div className={styles.notConfigured}>
           <p className={styles.notConfiguredText}>
-            Google not configured. Paste an OAuth access token to connect:
+            Google not configured. Set ASSISTANT_GOOGLE_CREDENTIALS_PATH in your .env file.
           </p>
-          <input
-            className={styles.configInput}
-            type="password"
-            value={tokenInput}
-            onChange={(e) => setTokenInput(e.target.value)}
-            placeholder="Paste Google OAuth token..."
-          />
-          <button className={styles.configButton} onClick={submitToken}>
-            Connect Google
-          </button>
-          {error && <span className={styles.error}>{error}</span>}
         </div>
       ) : events.length === 0 ? (
         <div className={styles.empty}>
