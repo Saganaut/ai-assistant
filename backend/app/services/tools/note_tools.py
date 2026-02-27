@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from app.core.sandbox import resolve_sandboxed_path
+from app.services.drive_sync import sync_note_to_drive
 from app.services.tools.base import BaseTool, ToolDefinition, ToolParameter
 
 
@@ -41,6 +42,7 @@ class HealthNoteTool(BaseTool):
             existing = f"# Health Log - {date_str}\n"
 
         file_path.write_text(existing + entry)
+        await sync_note_to_drive("health", date_str)
         return f"Health note logged ({category}) for {date_str} at {time_str}"
 
 
@@ -84,6 +86,8 @@ class QuickNoteTool(BaseTool):
             existing = header
 
         file_path.write_text(existing + entry)
+        if not custom_path:
+            await sync_note_to_drive("daily", date_str)
         return f"Note saved: {title}"
 
 

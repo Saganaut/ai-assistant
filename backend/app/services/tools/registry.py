@@ -28,6 +28,16 @@ from app.services.tools.google_tools import (
 )
 from app.services.tools.note_tools import HealthNoteTool, QuickNoteTool, ReadNotesTool
 from app.services.tools.web_tools import SaveBookmarkTool, WebBrowseTool, WebSearchTool
+from app.services.tools.wordpress_tools import (
+    WordPressCreatePostTool,
+    WordPressDeletePostTool,
+    WordPressGetPostTool,
+    WordPressListCategoriesTool,
+    WordPressListPostsTool,
+    WordPressListTagsTool,
+    WordPressUpdatePostTool,
+    WordPressUploadMediaTool,
+)
 
 
 class ToolRegistry:
@@ -86,5 +96,15 @@ def create_default_registry() -> ToolRegistry:
     registry.register(GitHubListProjectsTool())
     registry.register(GitHubListProjectItemsTool())
     registry.register(GitHubAddProjectItemTool())
+
+    # WordPress tools
+    registry.register(WordPressListPostsTool())
+    registry.register(WordPressGetPostTool())
+    registry.register(WordPressCreatePostTool())
+    registry.register(WordPressUpdatePostTool())
+    registry.register(WordPressDeletePostTool())
+    registry.register(WordPressUploadMediaTool())
+    registry.register(WordPressListTagsTool())
+    registry.register(WordPressListCategoriesTool())
 
     return registry

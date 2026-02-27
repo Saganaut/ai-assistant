@@ -1,12 +1,26 @@
 """GitHub integration tools - Projects, Repos, Issues."""
 
 import base64
+import json
+from pathlib import Path
 from typing import Any
 
+from app.core.config import settings
 from app.services.integrations.github import GitHubService
 from app.services.tools.base import BaseTool, ToolDefinition, ToolParameter
 
 _github = GitHubService()
+
+_SOURCES_FILE = settings.data_dir / "github_project_sources.json"
+
+
+def _load_project_sources() -> list[str]:
+    if _SOURCES_FILE.exists():
+        try:
+            return json.loads(_SOURCES_FILE.read_text())
+        except Exception:
+            pass
+    return []
 
 
 class GitHubListReposTool(BaseTool):
@@ -143,11 +157,15 @@ class GitHubListProjectsTool(BaseTool):
     def definition(self) -> ToolDefinition:
         return ToolDefinition(
             name="github_projects_list",
-            description="List GitHub Projects (v2) for the authenticated user or an organization.",
+            description=(
+                "List GitHub Projects (v2) the user has access to, "
+                "including projects from configured sources. "
+                "Call this with no arguments to see all accessible projects."
+            ),
             parameters=[
                 ToolParameter(
                     name="owner", type="string",
-                    description="Organization login name. Leave empty for user's own projects.",
+                    description="Optional: a specific GitHub username or org to query. Leave empty to list all accessible projects.",
                     required=False,
                 ),
             ],
@@ -155,7 +173,12 @@ class GitHubListProjectsTool(BaseTool):
 
     async def execute(self, **kwargs: Any) -> str:
         try:
-            projects = await _github.list_projects(owner=kwargs.get("owner"))
+            owner = kwargs.get("owner")
+            if owner:
+                projects = await _github.list_projects(owner=owner)
+            else:
+                sources = _load_project_sources()
+                projects = await _github.list_accessible_projects(extra_owners=sources)
         except Exception as e:
             return f"Error listing projects: {e}"
 
@@ -169,7 +192,9 @@ class GitHubListProjectsTool(BaseTool):
             desc = p.get("shortDescription", "") or ""
             closed = " (closed)" if p.get("closed") else ""
             pid = p.get("id", "")
-            lines.append(f"- #{num}: {title}{closed} [id: {pid}]\n  {desc}")
+            owner_login = (p.get("owner") or {}).get("login", "")
+            owner_str = f" (owner: {owner_login})" if owner_login else ""
+            lines.append(f"- #{num}: {title}{closed}{owner_str} [node_id: {pid}]\n  {desc}")
         return "Projects:\n" + "\n".join(lines)
 
 
@@ -177,15 +202,43 @@ class GitHubListProjectItemsTool(BaseTool):
     def definition(self) -> ToolDefinition:
         return ToolDefinition(
             name="github_projects_items",
-            description="List items (cards) in a GitHub Project. Shows status/column for each item.",
+            description=(
+                "List items (cards) in a GitHub Project. Shows status/column for each item. "
+                "You can provide either the project node_id directly, or an owner + project_number to resolve it."
+            ),
             parameters=[
-                ToolParameter(name="project_id", type="string", description="The Project node ID"),
+                ToolParameter(
+                    name="project_id", type="string",
+                    description="The Project node ID (e.g. 'PVT_kwHO...'). Optional if owner and project_number are provided.",
+                    required=False,
+                ),
+                ToolParameter(
+                    name="owner", type="string",
+                    description="GitHub username or org that owns the project. Use with project_number.",
+                    required=False,
+                ),
+                ToolParameter(
+                    name="project_number", type="integer",
+                    description="The project number (e.g. 3). Use with owner.",
+                    required=False,
+                ),
             ],
         )
 
     async def execute(self, **kwargs: Any) -> str:
         try:
-            items = await _github.list_project_items(kwargs["project_id"])
+            project_id = kwargs.get("project_id", "")
+            owner = kwargs.get("owner", "")
+            project_number = kwargs.get("project_number")
+
+            # Resolve project_id from owner + number if not provided directly
+            if not project_id or not project_id.startswith("PVT_"):
+                if owner and project_number is not None:
+                    project_id = await _github.resolve_project_id(owner, int(project_number))
+                elif not project_id:
+                    return "Error: provide either project_id, or owner + project_number."
+
+            items = await _github.list_project_items(project_id)
         except Exception as e:
             return f"Error listing project items: {e}"
 
@@ -217,9 +270,26 @@ class GitHubAddProjectItemTool(BaseTool):
     def definition(self) -> ToolDefinition:
         return ToolDefinition(
             name="github_projects_add_item",
-            description="Add a draft issue/card to a GitHub Project.",
+            description=(
+                "Add a draft issue/card to a GitHub Project. "
+                "You can provide either the project node_id directly, or an owner + project_number to resolve it."
+            ),
             parameters=[
-                ToolParameter(name="project_id", type="string", description="The Project node ID"),
+                ToolParameter(
+                    name="project_id", type="string",
+                    description="The Project node ID (e.g. 'PVT_kwHO...'). Optional if owner and project_number are provided.",
+                    required=False,
+                ),
+                ToolParameter(
+                    name="owner", type="string",
+                    description="GitHub username or org that owns the project. Use with project_number.",
+                    required=False,
+                ),
+                ToolParameter(
+                    name="project_number", type="integer",
+                    description="The project number (e.g. 3). Use with owner.",
+                    required=False,
+                ),
                 ToolParameter(name="title", type="string", description="Title for the new card"),
                 ToolParameter(name="body", type="string", description="Description/body for the card", required=False),
             ],
@@ -227,8 +297,18 @@ class GitHubAddProjectItemTool(BaseTool):
 
     async def execute(self, **kwargs: Any) -> str:
         try:
+            project_id = kwargs.get("project_id", "")
+            owner = kwargs.get("owner", "")
+            project_number = kwargs.get("project_number")
+
+            if not project_id or not project_id.startswith("PVT_"):
+                if owner and project_number is not None:
+                    project_id = await _github.resolve_project_id(owner, int(project_number))
+                elif not project_id:
+                    return "Error: provide either project_id, or owner + project_number."
+
             item = await _github.add_project_draft_issue(
-                project_id=kwargs["project_id"],
+                project_id=project_id,
                 title=kwargs["title"],
                 body=kwargs.get("body", ""),
             )

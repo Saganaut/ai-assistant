@@ -25,6 +25,7 @@ Personal AI assistant with web dashboard, deployed on home server, accessed via 
 ## Commands
 - Frontend: `cd frontend && npm run dev`
 - Backend: `cd backend && uv run uvicorn app.main:app --reload`
+- Tests: `cd backend && uv run pytest tests/ -v`
 
 ## Docs
 - `docs/ARCHITECTURE.md` - system architecture and design

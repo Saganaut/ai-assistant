@@ -1,0 +1,410 @@
+.container {
+  display: flex;
+  flex-direction: row;
+  gap: var(--spacing-md);
+  height: 100%;
+  min-height: 500px;
+}
+
+/* ── Left column ── */
+.leftCol {
+  flex: 0 0 28%;
+  min-width: 180px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+  overflow-y: auto;
+}
+
+.routineList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.routineRow {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  transition: border-color 0.15s;
+}
+
+.routineRowActive {
+  border-color: var(--color-accent);
+}
+
+.routineBtn {
+  flex: 1;
+  background: none;
+  border: none;
+  color: var(--color-text-secondary);
+  font-size: 0.84rem;
+  padding: var(--spacing-xs) var(--spacing-sm);
+  text-align: left;
+  cursor: pointer;
+  transition: color 0.15s;
+}
+
+.routineRow:hover .routineBtn {
+  color: var(--color-text-primary);
+}
+
+.routineRowActive .routineBtn {
+  color: var(--color-accent);
+}
+
+.routineActionBtn {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  border-left: 1px solid var(--color-border);
+  color: var(--color-text-muted);
+  font-size: 0.72rem;
+  padding: 4px 6px;
+  cursor: pointer;
+  transition: color 0.15s, background-color 0.15s;
+  line-height: 1;
+}
+
+.routineActionBtn:hover {
+  color: var(--color-text-primary);
+  background-color: var(--color-bg-secondary);
+}
+
+.routineActionBtnDanger:hover {
+  color: var(--color-error);
+}
+
+.newRoutineBtn {
+  background: none;
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-text-muted);
+  font-size: 0.8rem;
+  padding: var(--spacing-xs) var(--spacing-sm);
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.newRoutineBtn:hover {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+.recentSection {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.sectionLabel {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.recentDay {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  font-size: 0.8rem;
+  color: var(--color-text-secondary);
+}
+
+.recentCheck {
+  color: var(--color-success);
+  font-size: 0.9rem;
+}
+
+/* ── Right column ── */
+.rightCol {
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+  overflow-y: auto;
+}
+
+.routineHeader {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.routineTitle {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--color-text-primary);
+}
+
+.routineDesc {
+  font-size: 0.82rem;
+  color: var(--color-text-muted);
+}
+
+/* ── Section ── */
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.sectionHeader {
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 2px 0;
+}
+
+.sectionHeaderWarmup {
+  color: #f59e0b;
+  border-bottom: 1px solid #f59e0b44;
+}
+
+.sectionHeaderStrength {
+  color: #ef4444;
+  border-bottom: 1px solid #ef444444;
+}
+
+.sectionHeaderCooldown {
+  color: #3b82f6;
+  border-bottom: 1px solid #3b82f644;
+}
+
+/* ── Exercise card ── */
+.exerciseCard {
+  background-color: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  border-left-width: 3px;
+  overflow: hidden;
+}
+
+.exerciseCardWarmup {
+  border-left-color: #f59e0b;
+}
+
+.exerciseCardStrength {
+  border-left-color: #ef4444;
+}
+
+.exerciseCardCooldown {
+  border-left-color: #3b82f6;
+}
+
+.exerciseHeader {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-sm);
+  cursor: pointer;
+}
+
+.typeDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.typeDotWarmup {
+  background-color: #f59e0b;
+}
+
+.typeDotStrength {
+  background-color: #ef4444;
+}
+
+.typeDotCooldown {
+  background-color: #3b82f6;
+}
+
+.exerciseName {
+  flex: 1;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.exerciseNotes {
+  padding: 0 var(--spacing-sm) 4px calc(var(--spacing-sm) + 8px + var(--spacing-sm));
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  font-style: italic;
+}
+
+.expandBtn {
+  background: none;
+  border: none;
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
+  cursor: pointer;
+  padding: 0 2px;
+  transition: color 0.15s;
+}
+
+.expandBtn:hover {
+  color: var(--color-text-primary);
+}
+
+.expandedInfo {
+  padding: 0 var(--spacing-sm) var(--spacing-sm);
+  font-size: 0.8rem;
+  color: var(--color-text-secondary);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.wikiLink {
+  color: var(--color-accent);
+  text-decoration: none;
+  font-size: 0.78rem;
+}
+
+.wikiLink:hover {
+  text-decoration: underline;
+}
+
+/* ── Progression select ── */
+.progressionRow {
+  padding: 0 var(--spacing-sm) var(--spacing-sm);
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.progressionLabel {
+  font-size: 0.78rem;
+  color: var(--color-text-muted);
+  flex-shrink: 0;
+}
+
+.progressionSelect {
+  flex: 1;
+  background-color: var(--color-bg-input);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-primary);
+  font-size: 0.8rem;
+  padding: 3px 6px;
+}
+
+/* ── Set rows ── */
+.setsArea {
+  padding: 0 var(--spacing-sm) var(--spacing-sm);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.setRow {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+}
+
+.setLabel {
+  flex-shrink: 0;
+  width: 36px;
+  font-size: 0.75rem;
+}
+
+.setInput {
+  background-color: var(--color-bg-input);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-primary);
+  font-size: 0.8rem;
+  padding: 2px 6px;
+  width: 64px;
+}
+
+.setInput::placeholder {
+  color: var(--color-text-muted);
+}
+
+.setInputWide {
+  width: 80px;
+}
+
+.setCheck {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  accent-color: var(--color-accent);
+}
+
+.addSetBtn {
+  background: none;
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
+  padding: 2px var(--spacing-sm);
+  cursor: pointer;
+  width: fit-content;
+  transition: border-color 0.15s, color 0.15s;
+  margin-top: 2px;
+}
+
+.addSetBtn:hover {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+/* ── Save button ── */
+.saveRow {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: var(--spacing-sm);
+}
+
+.saveBtn {
+  background-color: var(--color-accent);
+  border: none;
+  border-radius: var(--radius-md);
+  color: white;
+  font-size: 0.88rem;
+  font-weight: 600;
+  padding: var(--spacing-sm) var(--spacing-lg);
+  cursor: pointer;
+  transition: background-color 0.15s;
+}
+
+.saveBtn:hover {
+  background-color: var(--color-accent-hover, #5b6ef5);
+}
+
+.saveBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.saveSuccess {
+  font-size: 0.82rem;
+  color: var(--color-success);
+  align-self: center;
+  margin-right: var(--spacing-sm);
+}
+
+/* ── Mobile: stack columns ── */
+@media (max-width: 768px) {
+  .container {
+    flex-direction: column;
+  }
+
+  .leftCol {
+    flex: none;
+    min-width: 0;
+  }
+}

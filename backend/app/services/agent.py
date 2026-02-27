@@ -1,7 +1,9 @@
 """Agent orchestration - handles multi-step tool use with the LLM."""
 
+import asyncio
 import json
 import logging
+from pathlib import Path
 from typing import AsyncIterator
 
 from google import genai
@@ -12,7 +14,7 @@ from app.services.tools.registry import ToolRegistry, create_default_registry
 
 logger = logging.getLogger(__name__)
 
-SYSTEM_PROMPT = """You are a helpful personal AI assistant running on a home server.
+SYSTEM_PROMPT_BASE = """You are a helpful personal AI assistant running on a home server.
 You have access to various tools to help the user manage their life.
 
 Available capabilities:
@@ -22,10 +24,77 @@ Available capabilities:
 - Browse the web and fetch page content
 - Search the web for current information
 - Save bookmarks with summaries
+- Google Calendar: list upcoming events, create new events, delete events
+- Google Drive: list files, search for files
+- Gmail: list recent emails, read specific emails, send emails
+- GitHub: list repositories, list/create issues, read repo files, list/manage projects and project items
 
-When the user asks you to do something that requires a tool, use the appropriate tool.
-You can chain multiple tools together to accomplish complex tasks.
-Always be concise and helpful. When you use a tool, briefly explain what you did."""
+IMPORTANT RULES:
+- When the user asks you to do something, IMMEDIATELY use the appropriate tool. Do NOT ask clarifying questions if you can figure it out from context or by calling a tool first.
+- Do NOT fabricate or make up data — always call the relevant tool to get real information.
+- Do NOT ask the user for project IDs, owner names, or other details you can look up yourself. Call github_projects_list or github_projects_items to find the information.
+- You can chain multiple tools together to accomplish complex tasks.
+- Always be concise and helpful. When you use a tool, briefly explain what you did."""
+
+_SOURCES_FILE = settings.data_dir / "github_project_sources.json"
+
+
+async def _build_system_prompt() -> str:
+    """Build the system prompt with dynamic context about known projects."""
+    prompt = SYSTEM_PROMPT_BASE
+
+    # Load and resolve known projects so the LLM has direct access
+    sources: list[str] = []
+    if _SOURCES_FILE.exists():
+        try:
+            sources = json.loads(_SOURCES_FILE.read_text())
+        except Exception:
+            pass
+
+    if settings.github_token:
+        try:
+            import httpx
+            from app.services.integrations.github import GitHubService
+            github = GitHubService()
+
+            # Fetch the authenticated user's GitHub username
+            async with httpx.AsyncClient() as client:
+                resp = await client.get(
+                    "https://api.github.com/user",
+                    headers=github._headers(),
+                    timeout=5.0,
+                )
+                if resp.status_code == 200:
+                    gh_username = resp.json().get("login", "")
+                    if gh_username:
+                        prompt += f"\n\nThe user's GitHub username is: {gh_username}"
+                        prompt += (
+                            f"\nWhen checking for issues assigned to the user, look for assignee \"{gh_username}\". "
+                            "Items in a project board that are assigned to this user are the user's tasks."
+                        )
+
+            # Fetch accessible projects
+            if sources:
+                projects = await github.list_accessible_projects(extra_owners=sources)
+                if projects:
+                    prompt += "\n\nKnown GitHub Projects the user has access to:"
+                    for p in projects:
+                        if p.get("closed"):
+                            continue
+                        owner = (p.get("owner") or {}).get("login", "unknown")
+                        title = p.get("title", "?")
+                        number = p.get("number", "?")
+                        node_id = p.get("id", "")
+                        prompt += f'\n- "{title}" (owner: {owner}, project_number: {number}, node_id: {node_id})'
+                    prompt += (
+                        "\n\nWhen the user asks about their project, tasks, issues, or board, "
+                        "use the projects listed above. Call github_projects_items with "
+                        "owner and project_number from the list — do NOT ask the user for these details."
+                    )
+        except Exception as e:
+            logger.debug(f"Failed to pre-fetch GitHub context for system prompt: {e}")
+
+    return prompt
 
 
 class Agent:
@@ -46,8 +115,9 @@ class Agent:
         Messages should be in Gemini format: [{"role": "user", "parts": [{"text": "..."}]}]
         """
         tools = self._build_tools()
+        system_prompt = await _build_system_prompt()
         config = types.GenerateContentConfig(
-            system_instruction=SYSTEM_PROMPT,
+            system_instruction=system_prompt,
             tools=tools,
         )
 

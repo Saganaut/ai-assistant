@@ -89,6 +89,28 @@ class GitHubService:
             resp.raise_for_status()
             return resp.json()
 
+    async def get_issue(
+        self, owner: str, repo: str, number: int,
+    ) -> dict[str, Any]:
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(
+                f"{self.BASE_URL}/repos/{owner}/{repo}/issues/{number}",
+                headers=self._headers(),
+            )
+            resp.raise_for_status()
+            issue = resp.json()
+
+            # Fetch comments
+            comments_resp = await client.get(
+                f"{self.BASE_URL}/repos/{owner}/{repo}/issues/{number}/comments",
+                headers=self._headers(),
+                params={"per_page": 30},
+            )
+            comments_resp.raise_for_status()
+            issue["_comments"] = comments_resp.json()
+
+            return issue
+
     async def read_file(self, owner: str, repo: str, path: str, ref: str = "main") -> dict[str, Any]:
         async with httpx.AsyncClient() as client:
             resp = await client.get(
@@ -115,13 +137,34 @@ class GitHubService:
             return data["data"]
 
     async def list_projects(self, owner: str | None = None) -> list[dict[str, Any]]:
-        """List GitHub Projects (v2) for the authenticated user or an org."""
+        """List GitHub Projects (v2) for the authenticated user, a user, or an org."""
         if owner:
+            # Try as user first, fall back to organization
+            query = """
+            query($owner: String!) {
+                user(login: $owner) {
+                    projectsV2(first: 20) {
+                        nodes { id number title shortDescription closed
+                                viewerCanUpdate
+                                owner { ... on User { login } ... on Organization { login } } }
+                    }
+                }
+            }
+            """
+            try:
+                data = await self._graphql(query, {"owner": owner})
+                return data["user"]["projectsV2"]["nodes"]
+            except Exception:
+                pass
+
+            # Fall back to organization query
             query = """
             query($owner: String!) {
                 organization(login: $owner) {
                     projectsV2(first: 20) {
-                        nodes { id number title shortDescription closed }
+                        nodes { id number title shortDescription closed
+                                viewerCanUpdate
+                                owner { ... on User { login } ... on Organization { login } } }
                     }
                 }
             }
@@ -133,13 +176,59 @@ class GitHubService:
             query {
                 viewer {
                     projectsV2(first: 20) {
-                        nodes { id number title shortDescription closed }
+                        nodes { id number title shortDescription closed
+                                owner { ... on User { login } ... on Organization { login } } }
                     }
                 }
             }
             """
             data = await self._graphql(query)
             return data["viewer"]["projectsV2"]["nodes"]
+
+    async def list_accessible_projects(
+        self, extra_owners: list[str] | None = None,
+    ) -> list[dict[str, Any]]:
+        """List all projects the viewer owns or collaborates on.
+
+        Since GitHub has no 'projects I collaborate on' API, we query the
+        viewer's own projects plus projects belonging to *extra_owners*.
+        Only projects where the viewer has access are returned.
+        """
+        seen_ids: set[str] = set()
+        results: list[dict[str, Any]] = []
+
+        # Viewer's own projects
+        try:
+            own = await self.list_projects()
+            for p in own:
+                pid = p.get("id", "")
+                if pid not in seen_ids:
+                    seen_ids.add(pid)
+                    results.append(p)
+        except Exception:
+            pass
+
+        # Projects from extra owners
+        for owner in extra_owners or []:
+            try:
+                projects = await self.list_projects(owner=owner)
+                for p in projects:
+                    pid = p.get("id", "")
+                    if pid not in seen_ids and p.get("viewerCanUpdate"):
+                        seen_ids.add(pid)
+                        results.append(p)
+            except Exception:
+                pass
+
+        return results
+
+    async def resolve_project_id(self, owner: str, number: int) -> str:
+        """Resolve a project owner + number to a GraphQL node ID."""
+        projects = await self.list_projects(owner=owner)
+        for p in projects:
+            if p.get("number") == number:
+                return p["id"]
+        raise ValueError(f"Project #{number} not found for {owner}")
 
     async def list_project_items(self, project_id: str, first: int = 50) -> list[dict[str, Any]]:
         query = """

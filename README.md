@@ -8,7 +8,7 @@ A self-hosted personal AI assistant with a web dashboard. Deployed on a home ser
 - **25 Agent Tools** - File management, web browsing/search, notes, bookmarks, health logging
 - **Google Integration** - Calendar, Drive, Gmail via OAuth token
 - **GitHub Integration** - Projects (kanban), repos, issues via GraphQL + REST
-- **Voice** - Push-to-talk with Whisper STT (local) and ElevenLabs TTS
+- **Voice** - Push-to-talk with Web Speech API (primary) / Whisper STT fallback, ElevenLabs TTS
 - **Scheduled Actions** - Cron-based automation (morning briefings, daily summaries, inbox triage)
 - **Mobile Friendly** - Responsive layout with floating chat button
 - **Sandboxed Files** - LLM file access is hard-sandboxed to `backend/data/`
@@ -54,6 +54,31 @@ cd backend && uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 # Terminal 2 - Frontend
 cd frontend && npm run dev
 ```
+
+## Remote Access (Tailscale HTTPS)
+
+To access the app from your phone or other devices over Tailscale with HTTPS (required for voice/microphone):
+
+1. **Enable HTTPS** in the [Tailscale admin DNS settings](https://login.tailscale.com/admin/dns)
+
+2. **Start the frontend and backend** as usual (see [Running](#running))
+
+3. **Set up Tailscale Serve** to proxy both on a single HTTPS origin:
+
+```bash
+# Serve frontend at root
+tailscale serve --https=443 / http://localhost:5173
+
+# Proxy /api to the backend
+tailscale serve --https=443 /api http://localhost:8000/api
+```
+
+4. **Access the app** at `https://<machine>.<tailnet>.ts.net`
+
+This is needed because the Web Speech API and microphone access (`getUserMedia`) both require a secure context (HTTPS or localhost). Without it, the voice button won't work on mobile.
+
+To check your current serve config: `tailscale serve status`
+To reset: `tailscale serve reset`
 
 ## API Endpoints
 
@@ -130,6 +155,51 @@ ai-assistant/
 ├── docs/
 └── shared/
 ```
+
+## Testing
+
+Backend tests use pytest with pytest-asyncio. Install dev dependencies first:
+
+```bash
+cd backend && uv sync --extra dev
+```
+
+Run the test suite:
+
+```bash
+cd backend && uv run pytest tests/ -v
+```
+
+### Test Structure
+
+```
+backend/tests/
+├── conftest.py                    # Fixtures: in-memory DB, mock agent, test client
+├── test_api_health.py             # Health endpoint
+├── test_api_conversations.py      # Conversation CRUD + 404 handling
+└── test_websocket_chat.py         # WebSocket chat: streaming, persistence, multi-turn
+```
+
+### Writing New Tests
+
+- All tests use an in-memory SQLite database (auto-reset per test via the `setup_test_db` fixture)
+- Use the `client` fixture for a pre-configured `TestClient` with mocked agent, patched DB engine, and disabled scheduler
+- WebSocket tests: use `client.websocket_connect("/api/chat/ws")` and drain tokens until the `{"type": "end"}` JSON marker
+- For direct DB assertions, use `Session(test_engine)` imported from `tests.conftest`
+
+## Debug Mode
+
+Enable verbose logging by setting the debug flag in your `.env`:
+
+```
+ASSISTANT_DEBUG=true
+```
+
+This controls:
+- **Backend:** Sets log level to DEBUG with timestamped output. All loggers (`app.api.chat`, `app.api.conversations`, `app.services.scheduler`, etc.) inherit this level.
+- **Frontend:** `log()`, `warn()`, `error()` from `src/utils/logger.ts` only output in dev mode (`npm run dev`). Production builds (`npm run build`) strip all `console.*` calls via terser.
+
+When `ASSISTANT_DEBUG` is not set or `false`, the backend logs at INFO level with concise formatting.
 
 ## Docs
 

@@ -12,7 +12,7 @@ A self-hosted personal AI assistant with a mobile-friendly web dashboard. Deploy
 | Backend     | FastAPI (Python), managed with uv   |
 | Database    | SQLite                              |
 | LLM         | Google Gemini API (swappable)       |
-| STT         | Whisper (local)                     |
+| STT         | Web Speech API (primary), Whisper (fallback) |
 | TTS         | ElevenLabs API (swappable)          |
 | Auth        | None (Tailscale network = trusted)  |
 | Deployment  | Home server, single-machine         |
@@ -27,6 +27,7 @@ ai-assistant/
 │   │   ├── pages/
 │   │   ├── hooks/
 │   │   ├── services/  # API client, websocket
+│   │   ├── utils/     # Logger utility
 │   │   ├── styles/    # Global styles, CSS variables
 │   │   └── types/
 │   ├── public/
@@ -54,6 +55,7 @@ ai-assistant/
 │   │   │   ├── integrations/
 │   │   │   │   ├── google.py    # Calendar, Drive, Gmail, etc.
 │   │   │   │   ├── github.py    # GitHub Projects, repos
+│   │   │   │   ├── wordpress.py # WordPress posts, media, tags
 │   │   │   │   └── browser.py   # Web browsing/research
 │   │   │   ├── scheduler/
 │   │   │   │   ├── scheduler.py  # Cron-based background scheduler
@@ -62,6 +64,11 @@ ai-assistant/
 │   │   │   └── agent.py         # Agent orchestration (tool use)
 │   │   ├── models/    # SQLite models (SQLAlchemy/SQLModel)
 │   │   └── main.py
+│   ├── tests/         # pytest test suite
+│   │   ├── conftest.py          # Fixtures: in-memory DB, mock agent, test client
+│   │   ├── test_api_health.py
+│   │   ├── test_api_conversations.py
+│   │   └── test_websocket_chat.py
 │   ├── data/          # Sandboxed folder for LLM file access
 │   ├── pyproject.toml
 │   └── .python-version
@@ -97,14 +104,17 @@ Tools available to the agent:
 - `github_projects_*` (list, create, update cards/issues)
 - `github_repos_*` (list, search, read files)
 - `web_search`, `web_browse` (fetch and summarize URLs)
+- `wordpress_*` (list, create, update, delete posts; upload media)
 - `save_bookmark` (save URL + summary to notes)
 - `health_note` (append to health/fitness notes)
 
 ### 4. Voice Pipeline
 
 ```
-[Push-to-Talk] → [Whisper STT (local)] → [Text to LLM] → [LLM Response] → [ElevenLabs TTS] → [Audio Playback]
+[Push-to-Talk] → [Web Speech API (primary) / Whisper (fallback)] → [Text to LLM] → [LLM Response] → [ElevenLabs TTS] → [Audio Playback]
 ```
+
+**STT** uses the browser's Web Speech API (`SpeechRecognition`) as the primary path — it's native, low-latency, and works on mobile (iOS Safari, Android Chrome) without a server round-trip. Whisper (local, via WebSocket) is the fallback for browsers that don't support Web Speech API (e.g., Firefox). The Web Speech API requires a secure context (HTTPS or localhost).
 
 Both STT and TTS are behind abstract interfaces for easy swapping.
 
@@ -126,6 +136,10 @@ Both STT and TTS are behind abstract interfaces for easy swapping.
 ├──────────────────┤                      │
 │  Quick Notes     │                      │
 │  / Health Log    │                      │
+│                  │                      │
+├──────────────────┤                      │
+│  WordPress       │                      │
+│  (Posts/Compose) │                      │
 │                  ├──────────────────────┤
 │                  │  File Browser        │
 │                  │  (sandboxed)         │
@@ -138,7 +152,26 @@ On mobile, these stack vertically with the chat panel accessible via a floating 
 
 Tailscale network membership = authorization. No login screen, no tokens for the web UI. API keys for external services (Gemini, ElevenLabs, Google, GitHub) are stored server-side in environment variables.
 
-### 7. Scheduled Actions (Automation)
+### 7. Networking & Tailscale Serve
+
+The frontend uses relative URLs (`/api/...`) for all API and WebSocket calls — no hardcoded ports or hostnames. This works in two modes:
+
+**Local development** — Vite's dev proxy (`vite.config.ts`) forwards `/api` requests to `http://localhost:8000`:
+```bash
+cd frontend && npm run dev    # serves UI on :5173, proxies /api → :8000
+cd backend && uv run uvicorn app.main:app --reload  # serves API on :8000
+```
+
+**Tailscale HTTPS (mobile / remote access)** — Use `tailscale serve` to expose both frontend and backend on a single HTTPS origin. This is required for features that need a secure context (Web Speech API, microphone access):
+```bash
+tailscale serve --https=443 / http://localhost:5173
+tailscale serve --https=443 /api http://localhost:8000/api
+```
+Then access via `https://<machine>.<tailnet>.ts.net`.
+
+The API base URL can be overridden with the `VITE_API_BASE` env var if needed (e.g., `VITE_API_BASE=http://192.168.1.50:8000/api`). The WebSocket base URL is derived from the same value automatically.
+
+### 8. Scheduled Actions (Automation)
 
 The assistant can run tasks autonomously on a schedule, not just on-demand.
 
@@ -181,6 +214,33 @@ The assistant can run tasks autonomously on a schedule, not just on-demand.
                                      │   SQLite     │
                                      │  (run log)   │
                                      └──────────────┘
+```
+
+## Logging
+
+### Backend
+Centralized logging is configured in `app/main.py` during the lifespan startup, controlled by `settings.debug`:
+- **Debug mode** (`ASSISTANT_DEBUG=true`): DEBUG level, verbose format with timestamps
+- **Production** (default): INFO level, concise format
+
+All modules use `logging.getLogger(__name__)` so they inherit the root config. Key loggers: `app.api.chat` (WebSocket events, agent errors), `app.api.conversations` (CRUD operations), `app.services.scheduler` (scheduled runs).
+
+### Frontend
+`src/utils/logger.ts` exports `log`, `warn`, `error` functions guarded by `import.meta.env.DEV`. In dev mode they output to the console; in production builds Vite tree-shakes them away. The Vite build also uses terser to strip any remaining `console.*` calls and comments.
+
+## Testing
+
+Backend tests use pytest with pytest-asyncio. All tests run against an in-memory SQLite database that resets per test.
+
+Key fixtures (in `tests/conftest.py`):
+- `setup_test_db` (autouse) — creates/drops tables each test
+- `mock_agent` — async generator yielding fake tokens
+- `client` — FastAPI `TestClient` with patched DB engine, mocked agent, and disabled scheduler
+
+Test coverage: health endpoint, conversation CRUD + 404s, WebSocket chat (streaming, persistence, multi-turn conversations).
+
+```bash
+cd backend && uv run pytest tests/ -v
 ```
 
 ## Communication

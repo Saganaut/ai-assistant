@@ -60,10 +60,89 @@
 
 .main {
   display: grid;
-  grid-template-columns: 1fr 1fr;
   gap: var(--spacing-md);
   padding: var(--spacing-md);
   overflow: hidden;
+}
+
+.mainHalf {
+  grid-template-columns: 1fr 1fr;
+}
+
+.mainQuarter {
+  grid-template-columns: 3fr 1fr;
+}
+
+.mainCollapsed {
+  grid-template-columns: 1fr;
+}
+
+/* On mobile, all sizes collapse to single column */
+@media (max-width: 768px) {
+  .mainHalf,
+  .mainQuarter,
+  .mainCollapsed {
+    grid-template-columns: 1fr;
+  }
+}
+
+.chatResizeBar {
+  display: flex;
+  gap: 4px;
+  justify-content: flex-end;
+  align-items: center;
+  padding: 2px var(--spacing-xs);
+  flex-shrink: 0;
+}
+
+@media (max-width: 768px) {
+  .chatResizeBar {
+    display: none;
+  }
+}
+
+.chatSizeBtn {
+  background: none;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
+  padding: 2px 6px;
+  cursor: pointer;
+  line-height: 1.4;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.chatSizeBtn:hover {
+  color: var(--color-text-primary);
+  border-color: var(--color-text-muted);
+}
+
+.chatSizeBtnActive {
+  color: var(--color-accent);
+  border-color: var(--color-accent);
+}
+
+.chatOpenBtn {
+  background: none;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-secondary);
+  font-size: 0.8rem;
+  padding: 2px 8px;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.chatOpenBtn:hover {
+  color: var(--color-accent);
+  border-color: var(--color-accent);
+}
+
+@media (max-width: 768px) {
+  .chatOpenBtn {
+    display: none;
+  }
 }
 
 .leftColumn {
@@ -71,6 +150,7 @@
   flex-direction: column;
   gap: var(--spacing-md);
   overflow-y: auto;
+  padding-right: 6px;
 }
 
 .rightColumn {
@@ -213,4 +293,86 @@
 
 .settingsClose:hover {
   border-color: var(--color-accent);
+}
+
+/* Integration status dots in header */
+.integrationDots {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.integrationDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.dotConnected {
+  background-color: var(--color-success);
+}
+
+.dotDisconnected {
+  background-color: var(--color-text-muted);
+}
+
+/* Mode selector */
+.modeSelector {
+  display: flex;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.modeSelectorBtn {
+  flex: 1;
+  background: none;
+  border: none;
+  border-right: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
+  font-size: 0.82rem;
+  padding: var(--spacing-xs) var(--spacing-sm);
+  cursor: pointer;
+  transition: background-color 0.15s, color 0.15s;
+}
+
+.modeSelectorBtn:last-child {
+  border-right: none;
+}
+
+.modeSelectorBtn:hover {
+  background-color: var(--color-bg-input);
+  color: var(--color-text-primary);
+}
+
+.modeSelectorBtnActive {
+  background-color: var(--color-accent);
+  color: white;
+}
+
+.modeSelectorBtnActive:hover {
+  background-color: var(--color-accent);
+  color: white;
+}
+
+.modeLabel {
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  font-weight: 400;
+  margin-left: 6px;
+}
+
+/* Integration status in settings */
+.settingsStatus {
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+
+.settingsStatusOn {
+  color: var(--color-success);
+}
+
+.settingsStatusOff {
+  color: var(--color-text-muted);
 }

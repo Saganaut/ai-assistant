@@ -219,3 +219,42 @@
   color: var(--color-text-muted);
   font-style: italic;
 }
+
+.ttsToggle {
+  background: none;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-muted);
+  font-size: 0.9rem;
+  cursor: pointer;
+  padding: 0 var(--spacing-xs);
+  line-height: 1.5;
+  transition: all 0.15s ease;
+}
+
+.ttsToggle:hover {
+  color: var(--color-text-primary);
+  border-color: var(--color-text-secondary);
+}
+
+.ttsToggleActive {
+  color: var(--color-accent);
+  border-color: var(--color-accent);
+  background-color: var(--color-accent-dim);
+}
+
+.claudeIndicator {
+  font-size: 0.7rem;
+  font-weight: 500;
+  color: var(--color-accent);
+  background-color: var(--color-accent-dim);
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+  margin-left: var(--spacing-xs);
+}
+
+.terminalOutput {
+  flex: 1;
+  overflow: hidden;
+  background-color: #0d0d0d;
+}

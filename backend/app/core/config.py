@@ -25,6 +25,11 @@ class Settings(BaseSettings):
     # GitHub
     github_token: str = ""
 
+    # WordPress
+    wordpress_url: str = ""
+    wordpress_username: str = ""
+    wordpress_app_password: str = ""
+
     # Server
     host: str = "0.0.0.0"
     port: int = 8000

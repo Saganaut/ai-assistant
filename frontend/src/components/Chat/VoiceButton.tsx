@@ -1,4 +1,6 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useMemo } from 'react';
+import { error as logError } from '../../utils/logger';
+import { getWsBase } from '../../services/api';
 import styles from './VoiceButton.module.css';
 
 interface VoiceButtonProps {
@@ -6,14 +8,64 @@ interface VoiceButtonProps {
   disabled?: boolean;
 }
 
+const SpeechRecognitionCtor =
+  typeof window !== 'undefined' && window.isSecureContext
+    ? window.SpeechRecognition || window.webkitSpeechRecognition
+    : undefined;
+
 export function VoiceButton({ onTranscription, disabled }: VoiceButtonProps) {
   const [state, setState] = useState<'idle' | 'recording' | 'processing'>('idle');
+  const recognitionRef = useRef<SpeechRecognition | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
 
-  const startRecording = useCallback(async () => {
-    if (disabled) return;
+  const useWebSpeech = useMemo(() => !!SpeechRecognitionCtor, []);
 
+  // ── Web Speech API path (primary) ──
+
+  const startWebSpeech = useCallback(() => {
+    if (!SpeechRecognitionCtor) return;
+
+    const recognition = new SpeechRecognitionCtor();
+    recognition.continuous = false;
+    recognition.interimResults = false;
+    recognition.lang = 'en-US';
+    recognitionRef.current = recognition;
+
+    recognition.onresult = (event: SpeechRecognitionEvent) => {
+      const transcript = event.results[0]?.[0]?.transcript;
+      if (transcript) {
+        onTranscription(transcript);
+      }
+    };
+
+    recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
+      if (event.error !== 'aborted') {
+        logError('Speech recognition error:', event.error);
+      }
+      setState('idle');
+    };
+
+    recognition.onend = () => {
+      setState('idle');
+    };
+
+    try {
+      recognition.start();
+      setState('recording');
+    } catch (err) {
+      logError('Speech recognition start failed:', err);
+      setState('idle');
+    }
+  }, [onTranscription]);
+
+  const stopWebSpeech = useCallback(() => {
+    recognitionRef.current?.stop();
+  }, []);
+
+  // ── Whisper WebSocket path (fallback) ──
+
+  const startWhisperRecording = useCallback(async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm;codecs=opus' });
@@ -38,8 +90,7 @@ export function VoiceButton({ onTranscription, disabled }: VoiceButtonProps) {
         setState('processing');
 
         try {
-          const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-          const ws = new WebSocket(`${protocol}//${window.location.hostname}:8000/api/voice/ws`);
+          const ws = new WebSocket(`${getWsBase()}/voice/ws`);
 
           ws.onopen = () => {
             blob.arrayBuffer().then((buffer) => {
@@ -83,22 +134,32 @@ export function VoiceButton({ onTranscription, disabled }: VoiceButtonProps) {
       mediaRecorder.start();
       setState('recording');
     } catch (err) {
-      console.error('Failed to start recording:', err);
+      logError('Failed to start recording:', err);
       setState('idle');
     }
-  }, [disabled, onTranscription]);
+  }, [onTranscription]);
 
-  const stopRecording = useCallback(() => {
+  const stopWhisperRecording = useCallback(() => {
     if (mediaRecorderRef.current && state === 'recording') {
       mediaRecorderRef.current.stop();
     }
   }, [state]);
 
+  // ── Unified handlers ──
+
   const handleClick = () => {
     if (state === 'idle') {
-      startRecording();
+      if (useWebSpeech) {
+        startWebSpeech();
+      } else {
+        startWhisperRecording();
+      }
     } else if (state === 'recording') {
-      stopRecording();
+      if (useWebSpeech) {
+        stopWebSpeech();
+      } else {
+        stopWhisperRecording();
+      }
     }
     // If processing, do nothing
   };
@@ -110,16 +171,18 @@ export function VoiceButton({ onTranscription, disabled }: VoiceButtonProps) {
 
   const icon = state === 'recording' ? '\u23F9' : state === 'processing' ? '\u23F3' : '\uD83C\uDF99';
 
+  const modeLabel = useWebSpeech ? 'Web Speech' : 'Whisper';
+  const title =
+    state === 'recording' ? 'Stop recording' :
+    state === 'processing' ? 'Processing...' :
+    `Push to talk (${modeLabel})`;
+
   return (
     <button
       className={className}
       onClick={handleClick}
       disabled={disabled || state === 'processing'}
-      title={
-        state === 'recording' ? 'Stop recording' :
-        state === 'processing' ? 'Processing...' :
-        'Push to talk'
-      }
+      title={title}
     >
       {icon}
     </button>

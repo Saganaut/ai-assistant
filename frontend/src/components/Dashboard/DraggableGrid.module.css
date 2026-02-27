@@ -1,0 +1,59 @@
+.grid {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+  /* Left padding keeps grip handles (left: -20px) inside the scroll container.
+     overflow-y: auto on the parent implicitly sets overflow-x: auto, clipping
+     anything that bleeds left. 24px matches the handle offset + breathing room. */
+  padding-left: 24px;
+}
+
+.sortableWrapper {
+  position: relative;
+}
+
+.sortableWrapper:hover .gripHandle {
+  opacity: 1;
+}
+
+.gripHandle {
+  position: absolute;
+  left: -20px;
+  top: 50%;
+  transform: translateY(-50%);
+  opacity: 0;
+  cursor: grab;
+  color: var(--color-text-muted);
+  font-size: 1rem;
+  line-height: 1;
+  user-select: none;
+  transition: opacity 0.15s ease;
+  z-index: 1;
+}
+
+.gripHandle:active {
+  cursor: grabbing;
+}
+
+.dragGhost {
+  background-color: var(--color-bg-card);
+  border: 1px solid var(--color-accent);
+  border-radius: var(--radius-md);
+  padding: var(--spacing-md);
+  color: var(--color-text-secondary);
+  font-size: 0.9rem;
+  font-weight: 500;
+  opacity: 0.85;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+}
+
+/* Hide grip handles on mobile - touch drag is handled differently */
+@media (max-width: 768px) {
+  .gripHandle {
+    display: none;
+  }
+
+  .grid {
+    padding-left: 0;
+  }
+}

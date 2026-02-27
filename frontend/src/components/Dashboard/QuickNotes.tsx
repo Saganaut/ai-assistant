@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import styles from './QuickNotes.module.css';
 
-const API_BASE = `${window.location.protocol}//${window.location.hostname}:8000/api`;
+import { API_BASE } from '../../services/api';
+import { useWidgetCollapse } from '../../hooks/useWidgetCollapse';
 
 interface NoteFile {
   path: string;
@@ -12,6 +13,7 @@ interface NoteFile {
 type Tab = 'notes' | 'health';
 
 export function QuickNotes() {
+  const [collapsed, toggleCollapsed] = useWidgetCollapse('quicknotes');
   const [tab, setTab] = useState<Tab>('notes');
   const [noteText, setNoteText] = useState('');
   const [noteFiles, setNoteFiles] = useState<NoteFile[]>([]);
@@ -75,58 +77,66 @@ export function QuickNotes() {
     <div className={styles.quickNotes}>
       <div className={styles.header}>
         <span className={styles.title}>Quick Notes</span>
-        <div className={styles.tabs}>
-          <button
-            className={tab === 'notes' ? styles.tabActive : styles.tab}
-            onClick={() => setTab('notes')}
-          >
-            Notes
-          </button>
-          <button
-            className={tab === 'health' ? styles.tabActive : styles.tab}
-            onClick={() => setTab('health')}
-          >
-            Health
-          </button>
-        </div>
-      </div>
-
-      <div className={styles.inputRow}>
-        <textarea
-          className={styles.noteInput}
-          value={noteText}
-          onChange={(e) => setNoteText(e.target.value)}
-          placeholder={tab === 'health' ? 'Log health/fitness note...' : 'Quick note...'}
-          rows={2}
-        />
-        <button
-          className={styles.saveButton}
-          onClick={handleSave}
-          disabled={saving || !noteText.trim()}
-        >
-          Save
-        </button>
-      </div>
-      {savedMsg && <span className={styles.saved}>{savedMsg}</span>}
-
-      {viewingNote ? (
-        <>
-          <button className={styles.backLink} onClick={() => setViewingNote(null)}>
-            Back to list
-          </button>
-          <pre className={styles.noteContent}>{viewingNote.content}</pre>
-        </>
-      ) : noteFiles.length === 0 ? (
-        <div className={styles.empty}>No {tab === 'health' ? 'health logs' : 'notes'} yet</div>
-      ) : (
-        <div className={styles.notesList}>
-          {noteFiles.slice(0, 10).map((f) => (
-            <button key={f.path} className={styles.noteFile} onClick={() => viewNote(f.path)}>
-              <span className={styles.noteFileName}>{f.name}</span>
-              <span className={styles.noteDate}>{new Date(f.modified).toLocaleDateString()}</span>
+        <div className={styles.headerRight}>
+          <div className={styles.tabs}>
+            <button
+              className={tab === 'notes' ? styles.tabActive : styles.tab}
+              onClick={() => setTab('notes')}
+            >
+              Notes
             </button>
-          ))}
+            <button
+              className={tab === 'health' ? styles.tabActive : styles.tab}
+              onClick={() => setTab('health')}
+            >
+              Health
+            </button>
+          </div>
+          <button className={styles.collapseBtn} onClick={toggleCollapsed} title={collapsed ? 'Expand' : 'Collapse'}>
+            {collapsed ? '\u25B8' : '\u25BE'}
+          </button>
         </div>
+      </div>
+
+      {!collapsed && (
+        <>
+          <div className={styles.inputRow}>
+            <textarea
+              className={styles.noteInput}
+              value={noteText}
+              onChange={(e) => setNoteText(e.target.value)}
+              placeholder={tab === 'health' ? 'Log health/fitness note...' : 'Quick note...'}
+              rows={2}
+            />
+            <button
+              className={styles.saveButton}
+              onClick={handleSave}
+              disabled={saving || !noteText.trim()}
+            >
+              Save
+            </button>
+          </div>
+          {savedMsg && <span className={styles.saved}>{savedMsg}</span>}
+          {viewingNote ? (
+            <>
+              <button className={styles.backLink} onClick={() => setViewingNote(null)}>
+                Back to list
+              </button>
+              <pre className={styles.noteContent}>{viewingNote.content}</pre>
+            </>
+          ) : noteFiles.length === 0 ? (
+            <div className={styles.empty}>No {tab === 'health' ? 'health logs' : 'notes'} yet</div>
+          ) : (
+            <div className={styles.notesList}>
+              {noteFiles.slice(0, 10).map((f) => (
+                <button key={f.path} className={styles.noteFile} onClick={() => viewNote(f.path)}>
+                  <span className={styles.noteFileName}>{f.name}</span>
+                  <span className={styles.noteDate}>{new Date(f.modified).toLocaleDateString()}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </>
       )}
     </div>
   );

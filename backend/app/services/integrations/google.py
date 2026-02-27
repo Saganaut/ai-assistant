@@ -234,36 +234,105 @@ class GoogleDriveService:
     async def upload_file(
         self, name: str, content: bytes, mime_type: str, folder_id: str | None = None
     ) -> dict[str, Any]:
+        """Upload a file using multipart upload (metadata + content in one request)."""
+        import json as _json
+
         metadata: dict[str, Any] = {"name": name}
         if folder_id:
             metadata["parents"] = [folder_id]
 
+        boundary = "----AssistantUploadBoundary"
+        metadata_json = _json.dumps(metadata)
+        body = (
+            f"--{boundary}\r\n"
+            f"Content-Type: application/json; charset=UTF-8\r\n\r\n"
+            f"{metadata_json}\r\n"
+            f"--{boundary}\r\n"
+            f"Content-Type: {mime_type}\r\n\r\n"
+        ).encode() + content + f"\r\n--{boundary}--".encode()
+
         headers = await self._google._get_headers()
-        # Simple upload for small files
         async with httpx.AsyncClient() as client:
             resp = await client.post(
                 f"{self.UPLOAD_URL}/files",
                 headers={
                     "Authorization": headers["Authorization"],
+                    "Content-Type": f"multipart/related; boundary={boundary}",
+                },
+                params={"uploadType": "multipart"},
+                content=body,
+            )
+            resp.raise_for_status()
+            return resp.json()
+
+    async def update_file(
+        self, file_id: str, content: bytes, mime_type: str
+    ) -> dict[str, Any]:
+        """Update an existing file's content."""
+        headers = await self._google._get_headers()
+        async with httpx.AsyncClient() as client:
+            resp = await client.patch(
+                f"{self.UPLOAD_URL}/files/{file_id}",
+                headers={
+                    "Authorization": headers["Authorization"],
                     "Content-Type": mime_type,
                 },
-                params={
-                    "uploadType": "media",
-                },
+                params={"uploadType": "media"},
                 content=content,
             )
             resp.raise_for_status()
-            file_data = resp.json()
+            return resp.json()
 
-            # Update metadata
-            if metadata.get("name"):
-                await client.patch(
-                    f"{self.BASE_URL}/files/{file_data['id']}",
-                    headers=headers,
-                    json=metadata,
-                )
+    async def create_folder(
+        self, name: str, parent_id: str | None = None
+    ) -> dict[str, Any]:
+        """Create a folder on Drive, returns file metadata."""
+        metadata: dict[str, Any] = {
+            "name": name,
+            "mimeType": "application/vnd.google-apps.folder",
+        }
+        if parent_id:
+            metadata["parents"] = [parent_id]
 
-            return file_data
+        headers = await self._google._get_headers()
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(
+                f"{self.BASE_URL}/files",
+                headers=headers,
+                json=metadata,
+            )
+            resp.raise_for_status()
+            return resp.json()
+
+    async def find_or_create_folder(
+        self, name: str, parent_id: str | None = None
+    ) -> dict[str, Any]:
+        """Find an existing folder by name within parent, or create it."""
+        q_parts = [
+            f"name = '{name}'",
+            "mimeType = 'application/vnd.google-apps.folder'",
+            "trashed = false",
+        ]
+        if parent_id:
+            q_parts.append(f"'{parent_id}' in parents")
+
+        headers = await self._google._get_headers()
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(
+                f"{self.BASE_URL}/files",
+                headers=headers,
+                params={
+                    "q": " and ".join(q_parts),
+                    "fields": "files(id,name)",
+                    "pageSize": 1,
+                },
+            )
+            resp.raise_for_status()
+            files = resp.json().get("files", [])
+
+        if files:
+            return files[0]
+        return await self.create_folder(name, parent_id)
 
     async def search(self, query: str, max_results: int = 10) -> list[dict[str, Any]]:
         return await self.list_files(query=query, max_results=max_results)

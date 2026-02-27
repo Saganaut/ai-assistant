@@ -1,4 +1,5 @@
 import json
+import logging
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
@@ -9,11 +10,13 @@ from app.models.conversation import ChatMessage, Conversation
 from app.services.agent import Agent
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 @router.websocket("/ws")
 async def chat_websocket(websocket: WebSocket):
     await websocket.accept()
+    logger.info("WebSocket connected")
     agent = Agent()
     gemini_messages: list[dict] = []
     conversation_id: int | None = None
@@ -37,6 +40,7 @@ async def chat_websocket(websocket: WebSocket):
             # Create conversation on first message if needed
             if conversation_id is None:
                 conversation_id = _create_conversation(user_text[:80])
+                logger.info(f"Created conversation {conversation_id}")
 
             # Save user message
             _save_message(conversation_id, "user", user_text)
@@ -44,9 +48,14 @@ async def chat_websocket(websocket: WebSocket):
 
             # Run agent with tool use
             full_response = ""
-            async for token in agent.run(gemini_messages):
-                await websocket.send_text(token)
-                full_response += token
+            try:
+                async for token in agent.run(gemini_messages):
+                    await websocket.send_text(token)
+                    full_response += token
+            except Exception as e:
+                logger.error(f"Agent error in conversation {conversation_id}: {e}", exc_info=True)
+                await websocket.send_json({"type": "error", "message": str(e)})
+                continue
 
             # Save assistant message
             _save_message(conversation_id, "assistant", full_response)
@@ -59,7 +68,7 @@ async def chat_websocket(websocket: WebSocket):
             await websocket.send_json({"type": "end", "conversation_id": conversation_id})
 
     except WebSocketDisconnect:
-        pass
+        logger.info(f"WebSocket disconnected (conversation {conversation_id})")
 
 
 def _create_conversation(title: str) -> int:

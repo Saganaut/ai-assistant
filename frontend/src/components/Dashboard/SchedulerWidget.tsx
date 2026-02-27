@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import styles from './SchedulerWidget.module.css';
 
-const API_BASE = `${window.location.protocol}//${window.location.hostname}:8000/api`;
+import { API_BASE } from '../../services/api';
+import { useWidgetCollapse } from '../../hooks/useWidgetCollapse';
 
 interface Schedule {
   id: number;
@@ -18,6 +19,7 @@ interface Template {
 }
 
 export function SchedulerWidget() {
+  const [collapsed, toggleCollapsed] = useWidgetCollapse('scheduler');
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [templates, setTemplates] = useState<Template[]>([]);
   const [showTemplates, setShowTemplates] = useState(false);
@@ -73,44 +75,55 @@ export function SchedulerWidget() {
     <div className={styles.scheduler}>
       <div className={styles.header}>
         <span className={styles.title}>Scheduled Actions</span>
-        <button className={styles.addButton} onClick={() => setShowTemplates(!showTemplates)}>
-          {showTemplates ? 'Cancel' : '+ Add'}
-        </button>
+        <div className={styles.headerRight}>
+          <button className={styles.addButton} onClick={() => setShowTemplates(!showTemplates)}>
+            {showTemplates ? 'Cancel' : '+ Add'}
+          </button>
+          <button className={styles.collapseBtn} onClick={toggleCollapsed} title={collapsed ? 'Expand' : 'Collapse'}>
+            {collapsed ? '\u25B8' : '\u25BE'}
+          </button>
+        </div>
       </div>
 
-      {showTemplates && (
-        <div className={styles.templateList}>
-          {templates.map((t, i) => (
-            <button key={i} className={styles.template} onClick={() => addFromTemplate(t)}>
-              <span className={styles.templateName}>{t.name}</span>
-              <span className={styles.templateCron}>{t.cron_expression}</span>
-            </button>
-          ))}
-        </div>
-      )}
-
-      {schedules.length === 0 && !showTemplates ? (
-        <div className={styles.empty}>No scheduled actions. Click + Add to create one.</div>
-      ) : (
-        <div className={styles.list}>
-          {schedules.map((s) => (
-            <div key={s.id} className={styles.item}>
-              <button
-                className={s.enabled ? styles.toggleOn : styles.toggleOff}
-                onClick={() => toggleSchedule(s.id, s.enabled)}
-                title={s.enabled ? 'Disable' : 'Enable'}
-              />
-              <span className={styles.itemName}>{s.name}</span>
-              <span className={styles.itemCron}>{s.cron_expression}</span>
-              <button
-                className={styles.deleteButton}
-                onClick={() => deleteSchedule(s.id)}
-              >
-                {'\u2715'}
-              </button>
+      {!collapsed && (
+        <>
+          {showTemplates && (
+            <div className={styles.templateList}>
+              {templates.map((t, i) => (
+                <button key={i} className={styles.template} onClick={() => addFromTemplate(t)}>
+                  <span className={styles.templateName}>{t.name}</span>
+                  <span className={styles.templateCron}>{t.cron_expression}</span>
+                </button>
+              ))}
             </div>
-          ))}
-        </div>
+          )}
+
+          {schedules.length === 0 && !showTemplates && (
+            <div className={styles.empty}>No scheduled actions. Click + Add to create one.</div>
+          )}
+
+          {schedules.length > 0 && (
+            <div className={styles.list}>
+              {schedules.map((s) => (
+                <div key={s.id} className={styles.item}>
+                  <button
+                    className={s.enabled ? styles.toggleOn : styles.toggleOff}
+                    onClick={() => toggleSchedule(s.id, s.enabled)}
+                    title={s.enabled ? 'Disable' : 'Enable'}
+                  />
+                  <span className={styles.itemName}>{s.name}</span>
+                  <span className={styles.itemCron}>{s.cron_expression}</span>
+                  <button
+                    className={styles.deleteButton}
+                    onClick={() => deleteSchedule(s.id)}
+                  >
+                    {'\u2715'}
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </>
       )}
     </div>
   );

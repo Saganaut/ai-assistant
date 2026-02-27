@@ -2,10 +2,11 @@
 
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, BackgroundTasks, HTTPException
 from pydantic import BaseModel
 
 from app.core.sandbox import SandboxError, resolve_sandboxed_path
+from app.services.drive_sync import sync_note_to_drive
 
 router = APIRouter()
 
@@ -57,7 +58,7 @@ async def read_note(path: str):
 
 
 @router.post("/quick")
-async def create_quick_note(note: NoteCreate):
+async def create_quick_note(note: NoteCreate, background_tasks: BackgroundTasks):
     """Create a quick note in the daily notes file."""
     now = datetime.now(timezone.utc)
     date_str = now.strftime("%Y-%m-%d")
@@ -75,11 +76,12 @@ async def create_quick_note(note: NoteCreate):
         existing = f"# Notes - {date_str}\n"
 
     file_path.write_text(existing + entry)
+    background_tasks.add_task(sync_note_to_drive, "daily", date_str)
     return {"status": "saved", "path": f"notes/daily/{date_str}.md"}
 
 
 @router.post("/health")
-async def create_health_note(note: NoteCreate):
+async def create_health_note(note: NoteCreate, background_tasks: BackgroundTasks):
     """Create a health/fitness note in the daily health log."""
     now = datetime.now(timezone.utc)
     date_str = now.strftime("%Y-%m-%d")
@@ -96,4 +98,5 @@ async def create_health_note(note: NoteCreate):
         existing = f"# Health Log - {date_str}\n"
 
     file_path.write_text(existing + entry)
+    background_tasks.add_task(sync_note_to_drive, "health", date_str)
     return {"status": "saved", "path": f"health/{date_str}.md"}

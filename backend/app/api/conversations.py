@@ -1,5 +1,7 @@
 """REST API for conversation history management."""
 
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session, select
 
@@ -7,6 +9,7 @@ from app.core.database import get_session
 from app.models.conversation import ChatMessage, Conversation
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 @router.get("/")
@@ -29,6 +32,7 @@ async def list_conversations(session: Session = Depends(get_session)):
 async def get_conversation(conversation_id: int, session: Session = Depends(get_session)):
     conv = session.get(Conversation, conversation_id)
     if not conv:
+        logger.debug(f"Conversation {conversation_id} not found")
         raise HTTPException(status_code=404, detail="Conversation not found")
 
     messages = session.exec(
@@ -58,6 +62,7 @@ async def get_conversation(conversation_id: int, session: Session = Depends(get_
 async def delete_conversation(conversation_id: int, session: Session = Depends(get_session)):
     conv = session.get(Conversation, conversation_id)
     if not conv:
+        logger.debug(f"Delete: conversation {conversation_id} not found")
         raise HTTPException(status_code=404, detail="Conversation not found")
 
     # Delete messages first
@@ -69,4 +74,5 @@ async def delete_conversation(conversation_id: int, session: Session = Depends(g
 
     session.delete(conv)
     session.commit()
+    logger.debug(f"Deleted conversation {conversation_id}")
     return {"status": "deleted"}

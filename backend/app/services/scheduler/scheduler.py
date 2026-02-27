@@ -99,6 +99,18 @@ async def _execute_scheduled_action(action: ScheduledAction) -> None:
                 session.commit()
 
 
+async def _check_weekly_summary(now: datetime) -> None:
+    """Run weekly summary generation on Monday at 01:00 UTC."""
+    if now.weekday() == 0 and now.hour == 1 and now.minute == 0:
+        logger.info("Triggering weekly summary generation")
+        try:
+            from app.services.drive_sync import generate_weekly_summary
+
+            await generate_weekly_summary()
+        except Exception:
+            logger.exception("Weekly summary generation failed")
+
+
 async def scheduler_loop() -> None:
     """Main scheduler loop. Checks every 60 seconds for actions to run."""
     logger.info("Scheduler started")
@@ -106,6 +118,9 @@ async def scheduler_loop() -> None:
     while True:
         try:
             now = datetime.now(timezone.utc)
+
+            # Weekly summary check (Monday 01:00 UTC)
+            await _check_weekly_summary(now)
 
             with Session(engine) as session:
                 # Rate limit check
