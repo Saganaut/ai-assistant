@@ -9,6 +9,7 @@ import { WorkoutWidget } from './WorkoutWidget';
 import { FileBrowser } from '../FileBrowser/FileBrowser';
 import { DraggableGrid } from './DraggableGrid';
 import type { AppMode } from '../../contexts/ModeContext';
+import styles from './Dashboard.module.css';
 
 const DEFAULT_ORDER = ['markets', 'calendar', 'kanban', 'wordpress', 'scheduler', 'notes', 'files'];
 
@@ -54,12 +55,16 @@ function loadOrder(): string[] {
   return DEFAULT_ORDER;
 }
 
+type HealthTab = 'calendar' | 'notes';
+
 interface DashboardProps {
   mode: AppMode;
 }
 
 export function Dashboard({ mode }: DashboardProps) {
   const [order, setOrder] = useState<string[]>(loadOrder);
+  const [healthTab, setHealthTab] = useState<HealthTab>('calendar');
+  const [healthTopCollapsed, setHealthTopCollapsed] = useState(false);
 
   const handleReorder = (newOrder: string[]) => {
     setOrder(newOrder);
@@ -68,11 +73,65 @@ export function Dashboard({ mode }: DashboardProps) {
 
   if (mode === 'health') {
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-md)' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 'var(--spacing-md)' }}>
-          <CalendarWidget />
-          <QuickNotes />
+      <div className={styles.healthContainer}>
+        {/* Top: Calendar + Notes */}
+        <div
+          className={`${styles.healthTopSection} ${
+            healthTopCollapsed ? styles.healthTopCollapsed : ''
+          }`}
+        >
+          {/* Mobile-only tab bar */}
+          <div className={styles.healthTopBar}>
+            <button
+              className={`${styles.healthTab} ${
+                healthTab === 'calendar' ? styles.healthTabActive : ''
+              }`}
+              onClick={() => {
+                setHealthTab('calendar');
+                setHealthTopCollapsed(false);
+              }}
+            >
+              Calendar
+            </button>
+            <button
+              className={`${styles.healthTab} ${
+                healthTab === 'notes' ? styles.healthTabActive : ''
+              }`}
+              onClick={() => {
+                setHealthTab('notes');
+                setHealthTopCollapsed(false);
+              }}
+            >
+              Notes
+            </button>
+            <button
+              className={styles.healthCollapseBtn}
+              onClick={() => setHealthTopCollapsed((c) => !c)}
+              title={healthTopCollapsed ? 'Expand' : 'Collapse'}
+            >
+              {healthTopCollapsed ? '▾' : '▴'}
+            </button>
+          </div>
+
+          {/* Calendar */}
+          <div
+            className={`${styles.healthWidget} ${
+              healthTab === 'calendar' ? styles.healthWidgetActive : ''
+            }`}
+          >
+            <CalendarWidget />
+          </div>
+
+          {/* Notes */}
+          <div
+            className={`${styles.healthWidget} ${
+              healthTab === 'notes' ? styles.healthWidgetActive : ''
+            }`}
+          >
+            <QuickNotes />
+          </div>
         </div>
+
         <WorkoutWidget />
       </div>
     );

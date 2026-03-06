@@ -25,3 +25,111 @@
   font-size: 0.9rem;
   font-style: italic;
 }
+
+/* ── Health mode layout ──────────────────────────────────────────────────── */
+
+.healthContainer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+/* Desktop: side-by-side grid */
+.healthTopSection {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: var(--spacing-md);
+}
+
+/* Tab bar hidden on desktop */
+.healthTopBar {
+  display: none;
+}
+
+/* Both widgets always visible on desktop */
+.healthWidget {
+  display: block;
+  min-width: 0;
+}
+
+/* ── Mobile: tabbed + collapsible ── */
+@media (max-width: 768px) {
+  .healthTopSection {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+  }
+
+  .healthTopBar {
+    display: flex;
+    align-items: stretch;
+    background-color: var(--color-bg-secondary);
+    border-bottom: 1px solid var(--color-border);
+    flex-shrink: 0;
+  }
+
+  .healthTopCollapsed .healthTopBar {
+    border-bottom: none;
+  }
+
+  .healthTab {
+    flex: 1;
+    background: none;
+    border: none;
+    border-right: 1px solid var(--color-border);
+    color: var(--color-text-secondary);
+    font-size: 0.84rem;
+    padding: 8px var(--spacing-sm);
+    cursor: pointer;
+    transition: color 0.15s, background-color 0.15s;
+  }
+
+  .healthTab:hover {
+    color: var(--color-text-primary);
+    background-color: var(--color-bg-input);
+  }
+
+  .healthTabActive {
+    color: var(--color-accent);
+    background-color: var(--color-bg-card);
+    font-weight: 600;
+  }
+
+  .healthCollapseBtn {
+    background: none;
+    border: none;
+    border-left: 1px solid var(--color-border);
+    color: var(--color-text-muted);
+    font-size: 0.82rem;
+    padding: 8px 10px;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: color 0.15s;
+    line-height: 1;
+  }
+
+  .healthCollapseBtn:hover {
+    color: var(--color-text-primary);
+  }
+
+  /* Widget pane: hidden by default on mobile */
+  .healthWidget {
+    display: none;
+    overflow-y: auto;
+    max-height: 260px;
+    padding: var(--spacing-sm);
+  }
+
+  /* Active tab content is visible */
+  .healthWidgetActive {
+    display: block;
+  }
+
+  /* Collapsed: hide even the active tab content */
+  .healthTopCollapsed .healthWidgetActive {
+    display: none;
+  }
+}

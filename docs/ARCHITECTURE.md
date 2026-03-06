@@ -24,10 +24,19 @@ ai-assistant/
 ├── frontend/          # React + TypeScript app
 │   ├── src/
 │   │   ├── components/
-│   │   ├── pages/
-│   │   ├── hooks/
-│   │   ├── services/  # API client, websocket
-│   │   ├── utils/     # Logger utility
+│   │   │   ├── Chat/       # Chat panel, voice button, CLI terminal (xterm.js)
+│   │   │   ├── Dashboard/  # All dashboard widgets
+│   │   │   │   ├── WorkoutWidget.tsx   # BWF RR tracker
+│   │   │   │   ├── RoutineEditor.tsx   # Routine CRUD modal
+│   │   │   │   ├── DraggableGrid.tsx   # Drag-and-drop widget grid
+│   │   │   │   └── ...
+│   │   │   └── Layout/     # Header, settings modal, error log modal
+│   │   ├── contexts/
+│   │   │   └── ModeContext.tsx   # Overview / Health / Work mode state
+│   │   ├── services/  # API client, websocket helpers
+│   │   ├── utils/
+│   │   │   ├── logger.ts        # Dev-only console logger
+│   │   │   └── errorLog.ts      # In-browser error capture
 │   │   ├── styles/    # Global styles, CSS variables
 │   │   └── types/
 │   ├── public/
@@ -37,10 +46,16 @@ ai-assistant/
 │   ├── app/
 │   │   ├── api/       # FastAPI route handlers
 │   │   │   ├── chat.py
+│   │   │   ├── claude_cli.py    # /claude and /gemini WebSocket endpoints
+│   │   │   ├── cli_ws.py        # PTY ↔ WebSocket bridge (session registry)
+│   │   │   ├── conversations.py
 │   │   │   ├── files.py
-│   │   │   ├── dashboard.py
-│   │   │   └── voice.py
-│   │   ├── core/      # Config, dependencies, security
+│   │   │   ├── integrations.py
+│   │   │   ├── notes.py
+│   │   │   ├── voice.py
+│   │   │   ├── workouts.py      # Workout routine + log CRUD
+│   │   │   └── ...
+│   │   ├── core/      # Config, dependencies, sandbox
 │   │   │   ├── config.py
 │   │   │   ├── sandbox.py    # File access sandboxing
 │   │   │   └── database.py
@@ -53,9 +68,9 @@ ai-assistant/
 │   │   │   │   ├── stt.py    # Whisper (local)
 │   │   │   │   └── tts.py    # ElevenLabs (swappable)
 │   │   │   ├── integrations/
-│   │   │   │   ├── google.py    # Calendar, Drive, Gmail, etc.
+│   │   │   │   ├── google.py    # Calendar, Drive, Gmail
 │   │   │   │   ├── github.py    # GitHub Projects, repos
-│   │   │   │   ├── wordpress.py # WordPress posts, media, tags
+│   │   │   │   ├── wordpress.py # WordPress posts, media (XML-RPC + REST)
 │   │   │   │   └── browser.py   # Web browsing/research
 │   │   │   ├── scheduler/
 │   │   │   │   ├── scheduler.py  # Cron-based background scheduler
@@ -65,11 +80,14 @@ ai-assistant/
 │   │   ├── models/    # SQLite models (SQLAlchemy/SQLModel)
 │   │   └── main.py
 │   ├── tests/         # pytest test suite
-│   │   ├── conftest.py          # Fixtures: in-memory DB, mock agent, test client
+│   │   ├── conftest.py
 │   │   ├── test_api_health.py
 │   │   ├── test_api_conversations.py
 │   │   └── test_websocket_chat.py
 │   ├── data/          # Sandboxed folder for LLM file access
+│   │   └── workouts/
+│   │       ├── routines/        # Routine JSON files
+│   │       └── YYYY-MM-DD.json  # Daily workout logs
 │   ├── pyproject.toml
 │   └── .python-version
 ├── shared/            # Shared types/contracts (if needed)
@@ -86,7 +104,7 @@ All LLM interactions go through an abstract interface (`services/llm/base.py`). 
 
 ### 2. Sandboxed File Access
 
-The LLM can ONLY access files within `backend/data/`. All file operations are validated against this path. Path traversal is blocked at the service layer. This is a hard security boundary.
+The LLM can ONLY access files within `backend/data/`. All file operations are validated against this path. Path traversal is blocked at the service layer. This is a hard security boundary. Workout data is stored within the sandbox at `data/workouts/`.
 
 ### 3. Agent / Tool-Use Pattern
 
@@ -118,41 +136,106 @@ Tools available to the agent:
 
 Both STT and TTS are behind abstract interfaces for easy swapping.
 
-### 5. Dashboard Layout (Fixed)
+### 5. Dashboard Modes
+
+The dashboard has three modes selected via Settings → Mode:
+
+| Mode | Layout |
+|------|--------|
+| **Overview** | Draggable grid — all widgets (Markets, Calendar, Kanban, WordPress, Scheduler, Notes, Files) |
+| **Work** | Draggable grid — Calendar, Kanban, Scheduler, Notes |
+| **Health** | Fixed — Calendar + Notes as collapsible tabs (top), WorkoutWidget full-width (bottom) |
+
+Mode is stored in `localStorage('app_mode')` and synced across tabs via the `storage` event. `ModeContext` (`src/contexts/ModeContext.tsx`) provides `mode` and `setMode` to the component tree.
 
 ```
-┌─────────────────────────────────────────┐
-│  Header / Status Bar                     │
-├──────────────────┬──────────────────────┤
-│                  │                      │
-│  Kanban /        │   Chat Panel         │
-│  Projects        │   (with voice)       │
-│                  │                      │
-├──────────────────┤                      │
-│                  │                      │
-│  Calendar        │                      │
-│  (Today/Week)    │                      │
-│                  │                      │
-├──────────────────┤                      │
-│  Quick Notes     │                      │
-│  / Health Log    │                      │
-│                  │                      │
-├──────────────────┤                      │
-│  WordPress       │                      │
-│  (Posts/Compose) │                      │
-│                  ├──────────────────────┤
-│                  │  File Browser        │
-│                  │  (sandboxed)         │
-└──────────────────┴──────────────────────┘
+┌────────────────────────────────────────────┐
+│  Header  [AI Assistant · Health]  ⚙        │
+├────────────────────────────────────────────┤
+│  [Calendar | Notes]  ▴                     │  ← collapsible tab bar (Health mode)
+│  ┌─────────────────────────────────────┐   │
+│  │  CalendarWidget / QuickNotes        │   │
+│  └─────────────────────────────────────┘   │
+│  ┌─────────────────────────────────────┐   │
+│  │  WorkoutWidget (full-width)         │   │
+│  └─────────────────────────────────────┘   │
+│                           │  Chat Panel    │
+└───────────────────────────┴────────────────┘
 ```
 
-On mobile, these stack vertically with the chat panel accessible via a floating button.
+On mobile, the tab bar is always visible; the widget content is hidden when collapsed.
 
-### 6. No Auth
+### 6. CLI Terminal (PTY ↔ WebSocket Bridge)
 
-Tailscale network membership = authorization. No login screen, no tokens for the web UI. API keys for external services (Gemini, ElevenLabs, Google, GitHub) are stored server-side in environment variables.
+Typing `/claude` or `/gemini` in chat opens an embedded xterm.js terminal that connects to the backend over WebSocket. The backend spawns the CLI in a pseudo-terminal (PTY).
 
-### 7. Networking & Tailscale Serve
+**Session persistence** is the critical design requirement — the user navigates between views and the process must not be killed.
+
+```
+Frontend (xterm.js)              Backend
+────────────────────             ────────────────────────────────────────
+connectCliWs(mode, sessionId)    run_cli_over_ws(websocket, command)
+  │                                │
+  │──── WS connect ───────────────→│  Resume existing session or spawn new PTY
+  │←─── cli_ready {session_id} ───│  Send session_id so client can reconnect
+  │                                │
+  │  [user types]                  │
+  │──── raw bytes ────────────────→│  os.write(master_fd, data)
+  │←─── PTY output ───────────────│  os.read(master_fd) in _pty_reader task
+  │                                │
+  │  [user navigates away]         │
+  │──── WS close ─────────────────→│  ws_holder[0] = None  (PTY reader keeps running,
+  │                                │   discards output; 60s cleanup timer starts)
+  │  [user returns within 60s]     │
+  │──── WS connect + session_id ──→│  Cancel cleanup; ws_holder[0] = new_ws; resumed=true
+  │←─── cli_ready {resumed:true} ─│
+  │←─── PTY output (resumes) ─────│
+```
+
+Key implementation details:
+- `_sessions: dict[str, PtySession]` — module-level registry, one entry per live session
+- `ws_holder: list[WebSocket | None]` — a mutable one-element list shared between the session and its reader coroutine; avoids closure issues with reassignment
+- `_pty_reader` — one long-running asyncio task per session; reads from the PTY master fd, writes to whatever WebSocket is currently in `ws_holder[0]`
+- Deferred cleanup — on WS disconnect, a `_deferred_cleanup` task sleeps 60 s then terminates the process; cancelled on reconnect
+- xterm.js — `convertEol: false` (PTY handles line endings); `TERM=xterm-256color`; `requestAnimationFrame` before `fitAddon.fit()` to ensure DOM is laid out; resize message forwarded to PTY via `TIOCSWINSZ`
+- Scrollbar — xterm's internal `.xterm-viewport` scrollbar is hidden via CSS (width 0) to eliminate phantom right-side padding
+
+### 7. Workout Tracker
+
+The WorkoutWidget implements the BWF Recommended Routine. Key design choices:
+
+**Data flow:**
+```
+Backend JSON files          Frontend
+────────────────────        ──────────────────────────────
+/api/workouts/routines  →   WorkoutWidget loads routines on mount
+/api/workouts/logs      →   loadTodayLog: check localStorage draft first,
+                              then fetch from API
+                        ←   saveWorkoutLog: POST to API + update localStorage
+```
+
+**Draft persistence** — workout state is auto-saved to `localStorage` on every change (`useEffect([log])`). The draft includes `{ savedAt, log }`. On load, the draft is used if:
+1. It exists for the selected routine
+2. `date === today` (drafts don't carry over to the next day)
+3. Age < 3 hours (`DRAFT_TTL = 3 * 60 * 60 * 1000`)
+
+**Routine storage** — each routine is stored as a JSON file in `backend/data/workouts/routines/{id}.json`. The BWF RR is seeded on the first `GET /api/workouts/routines` request if no routines exist.
+
+### 8. In-Browser Error Capture
+
+`src/utils/errorLog.ts` captures errors without interfering with the rest of the app:
+- Monkey-patches `console.error`
+- Listens to `window.addEventListener('unhandledrejection')` and `window.addEventListener('error')`
+- Stores entries in a circular buffer (max 100)
+- Uses an **immutable snapshot pattern** for `useSyncExternalStore` compatibility: `snapshot` is replaced with a new array reference on every mutation; `getEntries()` returns the same reference between mutations (required — React uses `Object.is` to detect changes)
+
+The error log button in the header is only visible when debug mode is enabled (Settings → Developer → Debug mode). Debug mode is stored in `localStorage('debug_mode')`.
+
+### 9. No Auth
+
+Tailscale network membership = authorization. No login screen, no tokens for the web UI. API keys for external services (Gemini, ElevenLabs, Google, GitHub, WordPress) are stored server-side in environment variables.
+
+### 10. Networking & Tailscale Serve
 
 The frontend uses relative URLs (`/api/...`) for all API and WebSocket calls — no hardcoded ports or hostnames. This works in two modes:
 
@@ -171,7 +254,7 @@ Then access via `https://<machine>.<tailnet>.ts.net`.
 
 The API base URL can be overridden with the `VITE_API_BASE` env var if needed (e.g., `VITE_API_BASE=http://192.168.1.50:8000/api`). The WebSocket base URL is derived from the same value automatically.
 
-### 8. Scheduled Actions (Automation)
+### 11. Scheduled Actions (Automation)
 
 The assistant can run tasks autonomously on a schedule, not just on-demand.
 
@@ -182,22 +265,8 @@ The assistant can run tasks autonomously on a schedule, not just on-demand.
 - When a schedule fires, the scheduler invokes the agent with the stored prompt, just like a user message but flagged as `source: scheduled`
 - Results are saved to the conversation history and optionally written to a file in the sandbox
 
-**Example scheduled actions:**
-- **Morning briefing** (daily 7am): "Summarize today's calendar, list open GitHub issues assigned to me, check unread emails"
-- **Daily summary** (daily 10pm): "Write a summary of what happened today to notes/daily/YYYY-MM-DD.md"
-- **Inbox triage** (every 2 hours): "Check for new emails, flag anything urgent"
-- **Health reminder** (daily 8pm): "Ask me to log today's health notes" (queues a notification/prompt)
-- **Project sync** (daily 9am): "Check GitHub Projects for stale cards, summarize blockers"
-
-**Management:**
-- Schedules are CRUD-managed via REST API (`/api/schedules`)
-- UI: a "Scheduled Actions" widget on the dashboard showing upcoming/recent runs
-- Each run is logged with: timestamp, prompt, result, success/failure
-- Schedules can be enabled/disabled without deleting them
-
 **Safety:**
 - All scheduled actions run through the same sandbox and tool permissions as on-demand requests
-- A schedule cannot escalate its own permissions
 - Rate limiting: max N scheduled runs per hour to prevent runaway loops
 - Failed runs are logged and retried with backoff (max 3 retries)
 
@@ -223,10 +292,12 @@ Centralized logging is configured in `app/main.py` during the lifespan startup, 
 - **Debug mode** (`ASSISTANT_DEBUG=true`): DEBUG level, verbose format with timestamps
 - **Production** (default): INFO level, concise format
 
-All modules use `logging.getLogger(__name__)` so they inherit the root config. Key loggers: `app.api.chat` (WebSocket events, agent errors), `app.api.conversations` (CRUD operations), `app.services.scheduler` (scheduled runs).
+All modules use `logging.getLogger(__name__)` so they inherit the root config. Key loggers: `app.api.chat` (WebSocket events, agent errors), `app.api.conversations` (CRUD operations), `app.services.scheduler` (scheduled runs), `app.api.cli_ws` (PTY session lifecycle).
 
 ### Frontend
 `src/utils/logger.ts` exports `log`, `warn`, `error` functions guarded by `import.meta.env.DEV`. In dev mode they output to the console; in production builds Vite tree-shakes them away. The Vite build also uses terser to strip any remaining `console.*` calls and comments.
+
+The in-browser debug panel (`src/utils/errorLog.ts`) is separate from the logger — it captures errors at runtime in production without any build-time stripping, gated only by the debug mode setting.
 
 ## Testing
 
@@ -246,4 +317,4 @@ cd backend && uv run pytest tests/ -v
 ## Communication
 
 - REST API for most operations
-- WebSocket for chat streaming and voice audio
+- WebSocket for chat streaming, voice audio, and CLI PTY sessions

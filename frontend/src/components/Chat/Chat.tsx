@@ -2,7 +2,13 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { Terminal } from 'xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import 'xterm/css/xterm.css';
-import { listConversations, getConversation, deleteConversation, getWsBase, type ConversationSummary } from '../../services/api';
+import {
+  listConversations,
+  getConversation,
+  deleteConversation,
+  getWsBase,
+  type ConversationSummary,
+} from '../../services/api';
 import { VoiceButton } from './VoiceButton';
 import { speakText, stopSpeaking } from '../../services/tts';
 import { log, warn, error as logError } from '../../utils/logger';
@@ -31,6 +37,8 @@ export function Chat() {
   const [cliMode, setCliMode] = useState<CliMode | null>(null);
   const [ttsEnabled, setTtsEnabled] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
+
+  // Refs — stable across renders, no re-render on change
   const ttsEnabledRef = useRef(false);
   const messagesRef = useRef<Message[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -43,14 +51,15 @@ export function Chat() {
   const reconnectAttempts = useRef(0);
   const unmountedRef = useRef(false);
 
-  // Keep refs in sync so WS callback can read current values
-  useEffect(() => {
-    ttsEnabledRef.current = ttsEnabled;
-  }, [ttsEnabled]);
+  // CLI-specific refs
+  const cliModeRef = useRef<CliMode | null>(null);
+  const cliSessionIdRef = useRef<string | null>(null);
+  const cliIntentionalCloseRef = useRef(false);
+  const cliReconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cliReconnectAttemptsRef = useRef(0);
 
-  useEffect(() => {
-    messagesRef.current = messages;
-  }, [messages]);
+  useEffect(() => { ttsEnabledRef.current = ttsEnabled; }, [ttsEnabled]);
+  useEffect(() => { messagesRef.current = messages; }, [messages]);
 
   const handleTtsToggle = useCallback(() => {
     setTtsEnabled((prev) => {
@@ -64,19 +73,15 @@ export function Chat() {
     try {
       const convs = await listConversations();
       setConversations(convs);
-    } catch {
-      // API might not be up yet
-    }
+    } catch { /* API might not be up yet */ }
   }, []);
 
-  useEffect(() => {
-    loadConversations();
-  }, [loadConversations]);
+  useEffect(() => { loadConversations(); }, [loadConversations]);
+
+  // ── Chat WebSocket ──────────────────────────────────────────────────────────
 
   const connectWebSocket = useCallback(() => {
     if (unmountedRef.current) return;
-
-    // Close existing connection if any
     if (wsRef.current) {
       wsRef.current.onclose = null;
       wsRef.current.close();
@@ -100,10 +105,9 @@ export function Chat() {
             setConversationId(data.conversation_id);
             loadConversations();
           }
-          // Read aloud if TTS is enabled
           if (ttsEnabledRef.current) {
             const last = messagesRef.current[messagesRef.current.length - 1];
-            if (last && last.role === 'assistant' && last.content) {
+            if (last?.role === 'assistant' && last.content) {
               setIsSpeaking(true);
               speakText(last.content).finally(() => setIsSpeaking(false));
             }
@@ -113,7 +117,7 @@ export function Chat() {
       } catch {
         setMessages((prev) => {
           const last = prev[prev.length - 1];
-          if (last && last.role === 'assistant') {
+          if (last?.role === 'assistant') {
             return [...prev.slice(0, -1), { ...last, content: last.content + event.data }];
           }
           return [...prev, { role: 'assistant', content: event.data }];
@@ -124,38 +128,23 @@ export function Chat() {
     ws.onclose = () => {
       setIsStreaming(false);
       setWsConnected(false);
-
       if (unmountedRef.current) return;
-
-      // Exponential backoff: 1s, 2s, 4s, 8s, max 30s
       const delay = Math.min(1000 * 2 ** reconnectAttempts.current, 30000);
       reconnectAttempts.current += 1;
-      warn(`[WS] Disconnected, reconnecting in ${delay}ms (attempt ${reconnectAttempts.current})`);
+      warn(`[WS] Disconnected, reconnecting in ${delay}ms`);
       reconnectTimeout.current = setTimeout(connectWebSocket, delay);
     };
 
-    ws.onerror = (e) => {
-      logError('[WS] Error:', e);
-    };
+    ws.onerror = (e) => { logError('[WS] Error:', e); };
   }, [loadConversations]);
 
   useEffect(() => {
     unmountedRef.current = false;
     connectWebSocket();
-
     return () => {
       unmountedRef.current = true;
-      if (reconnectTimeout.current) {
-        clearTimeout(reconnectTimeout.current);
-      }
-      if (wsRef.current) {
-        wsRef.current.onclose = null;
-        wsRef.current.close();
-      }
-      if (cliWsRef.current) {
-        cliWsRef.current.onclose = null;
-        cliWsRef.current.close();
-      }
+      if (reconnectTimeout.current) clearTimeout(reconnectTimeout.current);
+      if (wsRef.current) { wsRef.current.onclose = null; wsRef.current.close(); }
     };
   }, [connectWebSocket]);
 
@@ -163,134 +152,196 @@ export function Chat() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
+  // ── CLI mode ────────────────────────────────────────────────────────────────
+
   const exitCliMode = useCallback(() => {
+    cliIntentionalCloseRef.current = true;
+    if (cliReconnectTimeoutRef.current) {
+      clearTimeout(cliReconnectTimeoutRef.current);
+      cliReconnectTimeoutRef.current = null;
+    }
     if (cliWsRef.current) {
       cliWsRef.current.onclose = null;
       cliWsRef.current.close();
       cliWsRef.current = null;
     }
-    if (xtermRef.current) {
-      xtermRef.current.dispose();
-      xtermRef.current = null;
-    }
-    fitAddonRef.current = null;
+    cliSessionIdRef.current = null;
+    cliModeRef.current = null;
+    cliReconnectAttemptsRef.current = 0;
     setCliMode(null);
   }, []);
 
-  // Initialize xterm.js when entering CLI mode
+  /**
+   * Open (or re-open) the CLI WebSocket.  Pass sessionId to resume a
+   * live backend PTY session.  The xterm Terminal must already exist.
+   */
+  const connectCliWs = useCallback(
+    (mode: CliMode, sessionId: string | null) => {
+      if (cliWsRef.current) {
+        cliWsRef.current.onclose = null;
+        cliWsRef.current.close();
+      }
+
+      const url = sessionId
+        ? `${getWsBase()}/chat/${mode}?session_id=${encodeURIComponent(sessionId)}`
+        : `${getWsBase()}/chat/${mode}`;
+
+      const ws = new WebSocket(url);
+      cliWsRef.current = ws;
+
+      ws.onopen = () => {
+        log(`[${CLI_LABELS[mode]}] WS connected`);
+        cliReconnectAttemptsRef.current = 0;
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const msg = JSON.parse(event.data);
+
+          if (msg.type === 'cli_ready') {
+            cliSessionIdRef.current = msg.session_id;
+            if (msg.resumed) {
+              xtermRef.current?.write('\r\n\x1b[33m[Reconnected to session]\x1b[0m\r\n');
+            }
+            // Send actual terminal dimensions now that we know them
+            if (xtermRef.current) {
+              ws.send(JSON.stringify({
+                type: 'resize',
+                cols: xtermRef.current.cols,
+                rows: xtermRef.current.rows,
+              }));
+            }
+            return;
+          }
+
+          if (msg.type === 'cli_exit') {
+            xtermRef.current?.write(
+              `\r\n\x1b[90m[Process exited with code ${msg.code}]\x1b[0m\r\n`
+            );
+            cliSessionIdRef.current = null;
+            // Delay so the user can read the exit message
+            setTimeout(exitCliMode, 1500);
+            return;
+          }
+        } catch {
+          // Raw PTY output — write directly to xterm
+          xtermRef.current?.write(event.data);
+        }
+      };
+
+      ws.onclose = () => {
+        log(`[${CLI_LABELS[mode]}] WS closed`);
+        if (cliIntentionalCloseRef.current) return;
+        if (!cliModeRef.current) return; // already exited
+
+        const delay = Math.min(1000 * 2 ** cliReconnectAttemptsRef.current, 15000);
+        cliReconnectAttemptsRef.current++;
+        const secs = Math.round(delay / 1000);
+        xtermRef.current?.write(
+          `\r\n\x1b[33m[Disconnected. Reconnecting in ${secs}s...]\x1b[0m\r\n`
+        );
+
+        cliReconnectTimeoutRef.current = setTimeout(() => {
+          if (!cliModeRef.current || cliIntentionalCloseRef.current) return;
+          connectCliWs(mode, cliSessionIdRef.current);
+        }, delay);
+      };
+
+      ws.onerror = (e) => { logError(`[${CLI_LABELS[mode]}] Error:`, e); };
+    },
+    [exitCliMode]
+  );
+
+  // Initialize xterm when entering CLI mode
   useEffect(() => {
     if (!cliMode || !terminalRef.current) return;
 
-    const label = CLI_LABELS[cliMode];
+    cliModeRef.current = cliMode;
+    cliIntentionalCloseRef.current = false;
+    cliReconnectAttemptsRef.current = 0;
+    cliSessionIdRef.current = null;
 
     const term = new Terminal({
       cursorBlink: true,
-      fontSize: 14,
+      fontSize: 13,
       fontFamily: "'Fira Code', 'Cascadia Code', 'Consolas', monospace",
       theme: {
         background: '#0d0d0d',
         foreground: '#e0e0e0',
         cursor: '#e0e0e0',
+        selectionBackground: '#444',
       },
-      convertEol: true,
+      scrollback: 5000,
+      allowTransparency: false,
+      // Don't convert \n → \r\n: the PTY already sends \r\n
+      convertEol: false,
     });
+
     const fitAddon = new FitAddon();
     term.loadAddon(fitAddon);
     term.open(terminalRef.current);
-    fitAddon.fit();
 
     xtermRef.current = term;
     fitAddonRef.current = fitAddon;
 
-    // Handle window resize
-    const handleResize = () => fitAddon.fit();
-    window.addEventListener('resize', handleResize);
-
-    // Connect to CLI WebSocket
-    const ws = new WebSocket(`${getWsBase()}/chat/${cliMode}`);
-    cliWsRef.current = ws;
-
-    ws.onopen = () => {
-      log(`[${label}] WebSocket connected`);
-      term.writeln(`Connecting to ${label}...`);
-    };
-
-    ws.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        if (data.type === 'cli_ready') {
-          return;
-        }
-        if (data.type === 'cli_exit') {
-          term.writeln(`\r\n[${label} exited with code ${data.code}]`);
-          return;
-        }
-      } catch {
-        // Raw terminal output — write directly to xterm
-        term.write(event.data);
-      }
-    };
-
-    ws.onclose = () => {
-      log(`[${label}] WebSocket closed`);
-      term.writeln('\r\n[Disconnected]');
-    };
-
-    ws.onerror = (e) => {
-      logError(`[${label}] Error:`, e);
-    };
-
-    // Forward user keystrokes from xterm to WebSocket
+    // Forward keystrokes to the CLI process
     term.onData((data) => {
-      if (ws.readyState === WebSocket.OPEN) {
-        ws.send(data);
+      if (cliWsRef.current?.readyState === WebSocket.OPEN) {
+        cliWsRef.current.send(data);
       }
     });
 
-    // Send terminal dimensions so CLI can render properly
-    const sendResize = () => {
-      if (ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows }));
+    // Notify backend whenever xterm resizes
+    term.onResize(({ cols, rows }) => {
+      if (cliWsRef.current?.readyState === WebSocket.OPEN) {
+        cliWsRef.current.send(JSON.stringify({ type: 'resize', cols, rows }));
       }
-    };
-    term.onResize(sendResize);
-    ws.addEventListener('open', () => sendResize());
+    });
 
-    term.focus();
+    const handleWindowResize = () => fitAddonRef.current?.fit();
+    window.addEventListener('resize', handleWindowResize);
+
+    // Use rAF to ensure the container is fully laid out before fitting,
+    // then connect — so the first resize message has correct dimensions.
+    const rafId = requestAnimationFrame(() => {
+      fitAddon.fit();
+      term.focus();
+      connectCliWs(cliMode, null);
+    });
 
     return () => {
-      window.removeEventListener('resize', handleResize);
-      if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
-        ws.onclose = null;
-        ws.close();
+      cancelAnimationFrame(rafId);
+      window.removeEventListener('resize', handleWindowResize);
+      if (cliReconnectTimeoutRef.current) {
+        clearTimeout(cliReconnectTimeoutRef.current);
+        cliReconnectTimeoutRef.current = null;
       }
-      cliWsRef.current = null;
+      if (cliWsRef.current) {
+        cliWsRef.current.onclose = null;
+        cliWsRef.current.close();
+        cliWsRef.current = null;
+      }
       term.dispose();
       xtermRef.current = null;
       fitAddonRef.current = null;
+      cliModeRef.current = null;
     };
-  }, [cliMode]);
+  }, [cliMode, connectCliWs]);
+
+  // ── Regular chat ────────────────────────────────────────────────────────────
 
   const sendMessage = () => {
     if (!input.trim() || isStreaming) return;
-
     const trimmed = input.trim();
 
-    // Handle /clear command
-    if (trimmed === '/clear') {
-      setInput('');
-      startNewConversation();
-      return;
-    }
+    if (trimmed === '/clear') { setInput(''); startNewConversation(); return; }
 
-    // Handle CLI commands
     if (trimmed === '/claude' || trimmed === '/gemini') {
       setInput('');
       setCliMode(trimmed.slice(1) as CliMode);
       return;
     }
 
-    // Normal chat mode
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
       connectWebSocket();
       return;
@@ -298,21 +349,16 @@ export function Chat() {
 
     const userMessage: Message = { role: 'user', content: trimmed };
     setMessages((prev) => [...prev, userMessage]);
-
     const payload = conversationId
       ? JSON.stringify({ content: trimmed, conversation_id: conversationId })
       : trimmed;
-
     wsRef.current.send(payload);
     setInput('');
     setIsStreaming(true);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      sendMessage();
-    }
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
   };
 
   const loadConversation = async (id: number) => {
@@ -321,18 +367,13 @@ export function Chat() {
       setMessages(conv.messages.map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content })));
       setConversationId(id);
       setShowSidebar(false);
-    } catch {
-      // ignore
-    }
+    } catch { /* ignore */ }
   };
 
   const handleDeleteConversation = async (id: number, e: React.MouseEvent) => {
     e.stopPropagation();
     await deleteConversation(id);
-    if (conversationId === id) {
-      setMessages([]);
-      setConversationId(null);
-    }
+    if (conversationId === id) { setMessages([]); setConversationId(null); }
     loadConversations();
   };
 
@@ -341,6 +382,8 @@ export function Chat() {
     setConversationId(null);
     setShowSidebar(false);
   };
+
+  // ── Render ──────────────────────────────────────────────────────────────────
 
   return (
     <div className={styles.chat}>
@@ -354,25 +397,23 @@ export function Chat() {
           ) : (
             conversationId ? `Chat #${conversationId}` : 'New Chat'
           )}
-          {!wsConnected && !cliMode && <span className={styles.disconnected}> (reconnecting...)</span>}
+          {!wsConnected && !cliMode && (
+            <span className={styles.disconnected}> (reconnecting...)</span>
+          )}
         </span>
         {!cliMode && (
           <button
             className={`${styles.ttsToggle} ${ttsEnabled ? styles.ttsToggleActive : ''}`}
             onClick={handleTtsToggle}
-            title={ttsEnabled ? (isSpeaking ? 'Speaking... (click to disable)' : 'Read aloud ON') : 'Read aloud'}
+            title={ttsEnabled ? (isSpeaking ? 'Speaking...' : 'Read aloud ON') : 'Read aloud'}
           >
             {isSpeaking ? '\uD83D\uDD0A' : '\uD83D\uDD08'}
           </button>
         )}
         {cliMode ? (
-          <button className={styles.newChatButton} onClick={exitCliMode}>
-            Exit
-          </button>
+          <button className={styles.newChatButton} onClick={exitCliMode}>Exit</button>
         ) : (
-          <button className={styles.newChatButton} onClick={startNewConversation}>
-            +
-          </button>
+          <button className={styles.newChatButton} onClick={startNewConversation}>+</button>
         )}
       </div>
 
@@ -425,7 +466,7 @@ export function Chat() {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Type a message..."
+              placeholder="Type a message or /claude…"
               rows={1}
               disabled={isStreaming}
             />
@@ -433,7 +474,11 @@ export function Chat() {
               onTranscription={(text) => setInput((prev) => prev ? `${prev} ${text}` : text)}
               disabled={isStreaming}
             />
-            <button className={styles.sendButton} onClick={sendMessage} disabled={isStreaming || !input.trim()}>
+            <button
+              className={styles.sendButton}
+              onClick={sendMessage}
+              disabled={isStreaming || !input.trim()}
+            >
               Send
             </button>
           </div>

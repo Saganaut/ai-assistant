@@ -258,3 +258,13 @@
   overflow: hidden;
   background-color: #0d0d0d;
 }
+
+/* Hide xterm's internal scrollbar — it renders as blank padding on the right */
+.terminalOutput :global(.xterm-viewport) {
+  overflow-y: scroll;
+  scrollbar-width: none; /* Firefox */
+}
+
+.terminalOutput :global(.xterm-viewport)::-webkit-scrollbar {
+  width: 0; /* Chrome / Safari */
+}

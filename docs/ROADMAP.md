@@ -97,15 +97,49 @@
 
 **Goal:** Manage WordPress blog directly from the dashboard.
 
-- [x] WordPress REST API service (Application Passwords auth)
+- [x] WordPress REST API + XML-RPC service (XML-RPC for authenticated writes; REST for public reads)
 - [x] List/view posts with status filtering (publish, draft, pending)
 - [x] Create new posts with title, content, tags, categories
 - [x] Publish drafts from detail view
 - [x] Image upload with automatic WebP conversion and resize (<100KB)
 - [x] Featured image support on new posts
 - [x] Compose view in dashboard widget (mobile-friendly)
-- [x] Agent tools: `wordpress_list_posts`, `wordpress_create_post`, `wordpress_upload_media`
-- [x] Update and delete posts via API
+- [x] Agent tools: `wordpress_list_posts`, `wordpress_create_post`, `wordpress_upload_media`, `wordpress_update_post`, `wordpress_delete_post`
+
+## v1.0 - Dashboard Modes & Workout Tracker
+
+**Goal:** Mode-based dashboard layout; health-focused workout tracking.
+
+- [x] `ModeContext` — Overview / Health / Work modes, persisted in `localStorage`, cross-tab sync
+- [x] Mode selector in Settings modal; mode label in header
+- [x] **Overview mode** — all widgets in a draggable grid (unchanged from pre-modes layout)
+- [x] **Work mode** — Calendar, Kanban, Scheduler, Notes in a draggable grid
+- [x] **Health mode** — Calendar + Notes as collapsible tabs (mobile-friendly) + WorkoutWidget full-width
+- [x] WorkoutWidget: BWF Recommended Routine with correct warm-up exercises
+- [x] Progression selection for all exercise types (numbered levels 0, 1, 2…)
+- [x] Set/rep logging with per-set reps and weight inputs; add/remove sets
+- [x] Notes field per exercise (contextual cues from the routine)
+- [x] Recent sessions list (last 30 days)
+- [x] Workout draft persistence — auto-saved to `localStorage`, 3-hour TTL
+- [x] Routine CRUD editor — create/edit routines; section/exercise/progression management
+- [x] Routine storage as JSON files in `backend/data/workouts/routines/`; BWF RR seeded on first launch
+- [x] Workout log storage as `backend/data/workouts/YYYY-MM-DD.json`
+- [x] REST API: `/api/workouts/routines` (CRUD) + `/api/workouts/logs` + `/api/workouts/recent`
+
+## v1.1 - CLI Terminal & Debug Panel
+
+**Goal:** Embedded terminal for AI CLIs; in-browser error observability.
+
+- [x] PTY ↔ WebSocket bridge (`app/api/cli_ws.py`) with session registry
+- [x] `/claude` and `/gemini` chat commands open an embedded xterm.js terminal
+- [x] Session persistence — PTY kept alive 60 s after disconnect; client reconnects resume seamlessly
+- [x] Automatic reconnect with exponential backoff; ANSI status messages in terminal
+- [x] Terminal resize forwarded to PTY in real-time; `TERM=xterm-256color`, `COLORTERM=truecolor`
+- [x] xterm scrollbar hidden (width 0) to eliminate phantom right-side padding
+- [x] In-browser error log — captures `console.error`, unhandled rejections, window errors
+- [x] Immutable snapshot pattern for `useSyncExternalStore` (avoids infinite re-render loop)
+- [x] Debug mode setting in Settings → Developer; error log button in header with count badge
+- [x] Error modal: reverse-chronological list, type badges, timestamps, stack traces, "Clear all"
 
 ## Future Ideas
 
@@ -116,3 +150,4 @@
 - Local TTS (Piper, Coqui)
 - RAG over uploaded documents
 - Notifications (push notifications via Tailscale)
+- Markets/finance widget

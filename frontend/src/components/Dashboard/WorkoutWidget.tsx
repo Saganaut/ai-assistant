@@ -16,6 +16,44 @@ import type {
   WorkoutLog,
 } from '../../services/api';
 
+// ── Draft persistence ────────────────────────────────────────────────────────
+
+const DRAFT_KEY = 'workout_draft';
+const DRAFT_TTL = 3 * 60 * 60 * 1000; // 3 hours in ms
+
+interface DraftEntry {
+  savedAt: number;
+  log: WorkoutLog;
+}
+
+function saveDraft(log: WorkoutLog) {
+  try {
+    const entry: DraftEntry = { savedAt: Date.now(), log };
+    localStorage.setItem(DRAFT_KEY, JSON.stringify(entry));
+  } catch {
+    // quota exceeded or unavailable — silently ignore
+  }
+}
+
+function loadDraft(routineId: string): WorkoutLog | null {
+  try {
+    const raw = localStorage.getItem(DRAFT_KEY);
+    if (!raw) return null;
+    const entry = JSON.parse(raw) as DraftEntry;
+    const age = Date.now() - entry.savedAt;
+    if (
+      age > DRAFT_TTL ||
+      entry.log.date !== todayStr() ||
+      entry.log.routineId !== routineId
+    ) {
+      return null;
+    }
+    return entry.log;
+  } catch {
+    return null;
+  }
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function todayStr(): string {
@@ -92,21 +130,25 @@ export function WorkoutWidget() {
     }
   }, [selectedId]);
 
-  const loadTodayLog = useCallback(
-    async (routine: WorkoutRoutine) => {
-      try {
-        const data = await getWorkoutLog(todayStr());
-        if (data.log && data.log.routineId === routine.id) {
-          setLog(data.log);
-        } else {
-          setLog(makeInitialLog(routine));
-        }
-      } catch {
+  const loadTodayLog = useCallback(async (routine: WorkoutRoutine) => {
+    // 1. Prefer a recent local draft (survives reloads/reconnects within 3h)
+    const draft = loadDraft(routine.id);
+    if (draft) {
+      setLog(draft);
+      return;
+    }
+    // 2. Fall back to last saved state on the server
+    try {
+      const data = await getWorkoutLog(todayStr());
+      if (data.log && data.log.routineId === routine.id) {
+        setLog(data.log);
+      } else {
         setLog(makeInitialLog(routine));
       }
-    },
-    []
-  );
+    } catch {
+      setLog(makeInitialLog(routine));
+    }
+  }, []);
 
   const loadRecent = useCallback(async () => {
     try {
@@ -127,6 +169,11 @@ export function WorkoutWidget() {
       loadTodayLog(selectedRoutine);
     }
   }, [selectedRoutine, loadTodayLog]);
+
+  // Auto-save draft to localStorage on every log change
+  useEffect(() => {
+    if (log) saveDraft(log);
+  }, [log]);
 
   // ── Log mutation helpers ───────────────────────────────────────────────────
 

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useSyncExternalStore } from 'react';
 import styles from './Layout.module.css';
 import { Chat } from '../Chat/Chat';
 import { Dashboard } from '../Dashboard/Dashboard';
@@ -6,6 +6,8 @@ import { API_BASE, getIntegrationStatus } from '../../services/api';
 import type { IntegrationStatus } from '../../services/api';
 import { useMode } from '../../contexts/ModeContext';
 import type { AppMode } from '../../contexts/ModeContext';
+import { getEntries, clearEntries, subscribe } from '../../utils/errorLog';
+import type { ErrorEntry } from '../../utils/errorLog';
 
 type ChatSize = 'half' | 'quarter' | 'collapsed';
 
@@ -13,6 +15,10 @@ function loadChatSize(): ChatSize {
   const saved = localStorage.getItem('chat_size');
   if (saved === 'half' || saved === 'quarter' || saved === 'collapsed') return saved;
   return 'half';
+}
+
+function loadDebugMode(): boolean {
+  return localStorage.getItem('debug_mode') === 'true';
 }
 
 const MAIN_CLASS: Record<ChatSize, string> = {
@@ -27,17 +33,42 @@ const MODE_LABELS: Record<AppMode, string> = {
   work: 'Work',
 };
 
+function formatTime(ts: number): string {
+  return new Date(ts).toLocaleTimeString('en-US', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  });
+}
+
+function entryTypeClass(type: ErrorEntry['type']): string {
+  if (type === 'console') return styles.errorEntryConsole;
+  if (type === 'unhandled') return styles.errorEntryUnhandled;
+  return styles.errorEntryApi;
+}
+
 export function Layout() {
   const [showMobileChat, setShowMobileChat] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showErrors, setShowErrors] = useState(false);
   const [apiStatus, setApiStatus] = useState<'connected' | 'disconnected'>('disconnected');
   const [integrations, setIntegrations] = useState<IntegrationStatus | null>(null);
   const [chatSize, setChatSize] = useState<ChatSize>(loadChatSize);
+  const [debugMode, setDebugMode] = useState<boolean>(loadDebugMode);
   const { mode, setMode } = useMode();
+
+  // Subscribe to error log updates so badge re-renders.
+  // getEntries() returns a stable reference between mutations — required by useSyncExternalStore.
+  const errorEntries = useSyncExternalStore(subscribe, getEntries, getEntries);
 
   const updateChatSize = (size: ChatSize) => {
     setChatSize(size);
     localStorage.setItem('chat_size', size);
+  };
+
+  const toggleDebugMode = (val: boolean) => {
+    setDebugMode(val);
+    localStorage.setItem('debug_mode', String(val));
   };
 
   useEffect(() => {
@@ -65,12 +96,9 @@ export function Layout() {
   }, []);
 
   useEffect(() => {
-    if (showSettings) {
-      fetchIntegrations();
-    }
+    if (showSettings) fetchIntegrations();
   }, [showSettings, fetchIntegrations]);
 
-  // Fetch integration status on mount for header dots
   useEffect(() => {
     fetchIntegrations();
   }, [fetchIntegrations]);
@@ -102,6 +130,25 @@ export function Layout() {
           >
             {apiStatus === 'connected' ? '\u25CF Connected' : '\u25CB Disconnected'}
           </span>
+
+          {/* Error log button — visible only when debug mode is on */}
+          {debugMode && (
+            <button
+              className={`${styles.errorLogBtn} ${
+                errorEntries.length > 0 ? styles.errorLogBtnHasErrors : ''
+              }`}
+              onClick={() => setShowErrors(true)}
+              title="View error log"
+            >
+              Errors
+              {errorEntries.length > 0 && (
+                <span className={styles.errorBadge}>
+                  {errorEntries.length > 99 ? '99+' : errorEntries.length}
+                </span>
+              )}
+            </button>
+          )}
+
           {integrations && (
             <span className={styles.integrationDots}>
               <span
@@ -171,6 +218,7 @@ export function Layout() {
         {showMobileChat ? '\u2715' : '\uD83D\uDCAC'}
       </button>
 
+      {/* ── Settings modal ── */}
       {showSettings && (
         <div className={styles.settingsOverlay} onClick={() => setShowSettings(false)}>
           <div className={styles.settingsModal} onClick={(e) => e.stopPropagation()}>
@@ -192,6 +240,23 @@ export function Layout() {
             </div>
 
             <div className={styles.settingsSection}>
+              <div className={styles.settingsSectionTitle}>Developer</div>
+              <div className={styles.settingsRow}>
+                <span>Debug mode</span>
+                <button
+                  className={`${styles.modeSelectorBtn} ${debugMode ? styles.modeSelectorBtnActive : ''}`}
+                  style={{ padding: '2px 12px', fontSize: '0.8rem' }}
+                  onClick={() => toggleDebugMode(!debugMode)}
+                >
+                  {debugMode ? 'On' : 'Off'}
+                </button>
+              </div>
+              <div className={styles.settingsRow} style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)' }}>
+                <span>Shows error log button in header. Captures console errors and unhandled rejections.</span>
+              </div>
+            </div>
+
+            <div className={styles.settingsSection}>
               <div className={styles.settingsSectionTitle}>Connection</div>
               <div className={styles.settingsRow}>
                 <span>API Status</span>
@@ -201,9 +266,7 @@ export function Layout() {
               </div>
               <div className={styles.settingsRow}>
                 <span>Backend URL</span>
-                <span className={styles.settingsValue}>
-                  {API_BASE}
-                </span>
+                <span className={styles.settingsValue}>{API_BASE}</span>
               </div>
             </div>
 
@@ -279,6 +342,52 @@ export function Layout() {
             <button className={styles.settingsClose} onClick={() => setShowSettings(false)}>
               Close
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Error log modal ── */}
+      {showErrors && (
+        <div className={styles.errorModalOverlay} onClick={() => setShowErrors(false)}>
+          <div className={styles.errorModal} onClick={(e) => e.stopPropagation()}>
+            <div className={styles.errorModalHeader}>
+              <span className={styles.errorModalTitle}>
+                Error Log
+                {errorEntries.length > 0 && ` (${errorEntries.length})`}
+              </span>
+              <div className={styles.errorModalActions}>
+                {errorEntries.length > 0 && (
+                  <button className={styles.errorClearBtn} onClick={clearEntries}>
+                    Clear all
+                  </button>
+                )}
+                <button className={styles.settingsButton} onClick={() => setShowErrors(false)}>
+                  ×
+                </button>
+              </div>
+            </div>
+
+            <div className={styles.errorList}>
+              {errorEntries.length === 0 ? (
+                <div className={styles.errorEmpty}>No errors captured.</div>
+              ) : (
+                [...errorEntries].reverse().map((entry) => (
+                  <div
+                    key={entry.id}
+                    className={`${styles.errorEntry} ${entryTypeClass(entry.type)}`}
+                  >
+                    <div className={styles.errorEntryHeader}>
+                      <span className={styles.errorEntryType}>{entry.type}</span>
+                      <span className={styles.errorEntryTime}>{formatTime(entry.ts)}</span>
+                    </div>
+                    <div className={styles.errorEntryMessage}>{entry.message}</div>
+                    {entry.detail && (
+                      <div className={styles.errorEntryDetail}>{entry.detail}</div>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
           </div>
         </div>
       )}

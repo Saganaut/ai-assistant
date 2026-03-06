@@ -6,10 +6,10 @@ router = APIRouter()
 
 
 @router.websocket("/claude")
-async def claude_cli_ws(websocket: WebSocket):
-    await run_cli_over_ws(websocket, "claude")
+async def claude_cli_ws(websocket: WebSocket, session_id: str | None = None):
+    await run_cli_over_ws(websocket, "claude", session_id=session_id)
 
 
 @router.websocket("/gemini")
-async def gemini_cli_ws(websocket: WebSocket):
-    await run_cli_over_ws(websocket, "gemini")
+async def gemini_cli_ws(websocket: WebSocket, session_id: str | None = None):
+    await run_cli_over_ws(websocket, "gemini", session_id=session_id)
